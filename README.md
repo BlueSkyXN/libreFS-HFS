@@ -49,7 +49,7 @@ https://<space-subdomain>.hf.space/<bucket>/<object>
 | Secret | `MINIO_ROOT_USER` | libreFS root user |
 | Secret | `MINIO_ROOT_PASSWORD` | libreFS root password |
 | Variable，可选 | `PUBLIC_BASE_URL` | 外部访问地址，例如 `https://<space-subdomain>.hf.space` |
-| Variable，可选 | `LIBREFS_REF` | 构建的 libreFS branch 或 tag，默认 `main` |
+| Variable，可选 | `LIBREFS_REF` | 构建的 libreFS branch 或 tag，默认 `master` |
 | Variable，可选 | `LIBREFS_COMMIT` | 可选的源码 commit 校验值，默认 `HEAD` 不校验 |
 | Variable，可选 | `GO_VERSION` | 构建用 Go 版本，默认 `1.26.3` |
 
