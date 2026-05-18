@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.6
 
 ARG UBUNTU_VERSION=24.04
+ARG APP_UID=1000
+ARG APP_GID=1000
 
 FROM ubuntu:${UBUNTU_VERSION} AS builder
 
@@ -56,23 +58,32 @@ RUN apt-get update \
         tini \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd -m -u 1000 user \
-    && mkdir -p \
+ARG APP_UID=1000
+ARG APP_GID=1000
+
+RUN set -eux; \
+    if ! getent group "${APP_GID}" >/dev/null; then \
+        groupadd -g "${APP_GID}" app; \
+    fi; \
+    if ! getent passwd "${APP_UID}" >/dev/null; then \
+        useradd -m -u "${APP_UID}" -g "${APP_GID}" user; \
+    fi; \
+    mkdir -p \
         /data \
         /tmp/nginx/client_body \
         /tmp/nginx/proxy \
         /tmp/nginx/fastcgi \
         /tmp/nginx/uwsgi \
-        /tmp/nginx/scgi \
-    && chown -R user:user /data /tmp/nginx
+        /tmp/nginx/scgi; \
+    chown -R "${APP_UID}:${APP_GID}" /data /tmp/nginx
 
 COPY --from=builder --chmod=0755 /out/librefs /usr/local/bin/librefs
 COPY --chmod=0644 nginx.conf /etc/nginx/nginx.conf
 COPY --chmod=0755 start.sh /start.sh
 
-ENV HOME=/home/user
+ENV HOME=/tmp
 
-USER user
+USER ${APP_UID}:${APP_GID}
 
 EXPOSE 7860
 
