@@ -23,6 +23,7 @@
 | `.gitattributes` | 是 | Hugging Face 仓库的 LFS 类型规则。 |
 | `.gitignore` | 否 | 本地 Git 忽略规则。 |
 | `scripts/validate-contract.sh` | 否 | 本地轻量契约验证入口，不编译 libreFS。 |
+| `scripts/smoke-s3-curl.sh` | 否 | 凭证型 S3 smoke test，使用 `curl --aws-sigv4` 验证最小读写和 public read policy。 |
 | `docs/*.md` | 否 | 文档，不参与 runtime，但会触发 Space rebuild。 |
 
 ## `README.md`
@@ -190,6 +191,7 @@ https://blueskyxn-librefs-hfs.hf.space/minio/health/ready
 | `MINIO_BROWSER_REDIRECT_URL` | Console 对外地址，默认是 `${MINIO_SERVER_URL}/console/`。 |
 
 这里强制把 URL 末尾 `/` 处理清楚，是为了减少 Console 登录跳转和静态资源路径问题。
+如果用户覆盖 `MINIO_SERVER_URL`，脚本会要求它包含 `http://` 或 `https://` scheme；如果用户覆盖 `MINIO_BROWSER_REDIRECT_URL`，脚本会补齐末尾 `/`，但仍要求最终值以 `/console/` 结尾。
 
 ### 进程模型
 
@@ -349,6 +351,36 @@ Console 代理层还会隐藏 upstream `X-Frame-Options`，并添加 `Content-Se
 scripts/validate-contract.sh --remote
 ```
 
+## `scripts/smoke-s3-curl.sh`
+
+这个脚本用于凭证型 S3 smoke test。它只依赖 `curl --aws-sigv4`，避免为了验收安装 `aws`、`mc` 或其他 S3 client。
+
+脚本读取：
+
+| 变量 | 用途 |
+| --- | --- |
+| `MINIO_ROOT_USER` / `AWS_ACCESS_KEY_ID` | S3 access key。 |
+| `MINIO_ROOT_PASSWORD` / `AWS_SECRET_ACCESS_KEY` | S3 secret key。 |
+| `S3_ENDPOINT` | S3 endpoint，默认是当前 HF Space 公开域名。 |
+| `AWS_REGION` | 签名 region，默认 `us-east-1`。 |
+| `S3_SMOKE_BUCKET` | 临时 bucket 名；未设置时自动生成。 |
+| `S3_SMOKE_OBJECT` | 临时对象名，默认 `smoke.txt`。 |
+| `S3_SMOKE_PAYLOAD` | 临时对象内容；未设置时自动生成时间戳内容。 |
+
+执行范围：
+
+1. 签名 `ListBuckets`。
+2. 确认临时 bucket 不存在。
+3. 创建临时 bucket。
+4. 上传临时对象。
+5. 签名下载并比对内容。
+6. 验证匿名读取在公开策略前返回 `403`。
+7. 写入 public read bucket policy。
+8. 验证匿名 HTTP 直链。
+9. 删除 policy、object 和 bucket。
+
+这个脚本会真实修改 endpoint 上的临时 bucket 和对象，不会被 `scripts/validate-contract.sh` 自动执行。
+
 ## 修改边界
 
 ### 改 `Dockerfile` 后必须验证
@@ -363,8 +395,9 @@ scripts/validate-contract.sh --remote
 
 - 缺少 secret 时是否明确失败。
 - `PUBLIC_BASE_URL` / `SPACE_HOST` 推导是否正确。
+- 覆盖 `MINIO_SERVER_URL` 时是否拒绝缺少 scheme 的值。
 - `MINIO_SERVER_URL` 是否没有多余尾部 `/`。
-- `MINIO_BROWSER_REDIRECT_URL` 是否以 `/console/` 结尾。
+- `MINIO_BROWSER_REDIRECT_URL` 是否以 `/console/` 结尾，并拒绝其他子路径。
 - libreFS 和 Nginx 任一退出时容器是否能退出。
 
 ### 改 `nginx.conf` 后必须验证

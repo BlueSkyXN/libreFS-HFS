@@ -66,6 +66,7 @@ Rules:
 | `git diff --check` | 检查 whitespace/error marker | local repo | 只读；默认可运行 |
 | `scripts/validate-contract.sh` | 汇总检查 front matter、Dockerfile、start.sh、nginx.conf、license 和本机 Nginx 语法 | local repo | 只读；不安装依赖、不本地编译 libreFS |
 | `scripts/validate-contract.sh --remote` | 在本地契约检查基础上额外检查公开 health endpoint | local + remote Space | 需要网络；不读取 Secret、不修改 Space |
+| `MINIO_ROOT_USER=... MINIO_ROOT_PASSWORD=... scripts/smoke-s3-curl.sh` | 使用 `curl --aws-sigv4` 执行临时 bucket/object 的 S3 smoke test | remote Space | 会修改线上临时 bucket/object；只在用户明确要求凭证型验收时运行 |
 | `mkdir -p /tmp/nginx/client_body /tmp/nginx/proxy /tmp/nginx/fastcgi /tmp/nginx/uwsgi /tmp/nginx/scgi && nginx -t -c "$PWD/nginx.conf"` | 本地校验 Nginx 配置语法 | `nginx.conf` | 需要本机安装 `nginx`；不启动服务 |
 | `nginx -t -c "$NGINX_CONF"` | runtime 启动前校验 Nginx 配置 | container runtime | 容器内命令；需先创建 `/tmp/nginx/*` 临时目录 |
 | `curl -fsS https://blueskyxn-librefs-hfs.hf.space/minio/health/ready -o /dev/null -w 'health_http=%{http_code}\n'` | 检查公开健康端点 | remote Space | 需要网络；预期 `health_http=200` |
@@ -128,6 +129,7 @@ Rules:
 - 启动前必须校验 `MINIO_ROOT_USER` 和 `MINIO_ROOT_PASSWORD`，缺失时直接失败。
 - 公开 URL 优先级：`PUBLIC_BASE_URL` > `SPACE_HOST` > `http://localhost:7860`。
 - `MINIO_SERVER_URL` 必须去掉末尾 `/`；`MINIO_BROWSER_REDIRECT_URL` 必须以 `/console/` 结尾。
+- 如果用户覆盖 `MINIO_SERVER_URL`，必须包含 `http://` 或 `https://` scheme；如果覆盖 `MINIO_BROWSER_REDIRECT_URL`，仍必须落在 `/console/` 子路径。
 - 执行 `nginx -t -c "$NGINX_CONF"` 前必须创建 `/tmp/nginx/*` 临时目录。
 - libreFS 和 Nginx 必须都被监控；任一进程退出时容器应退出并清理另一个进程。修改 signal handling 后检查 `tini`、`INT`、`TERM`。
 
@@ -201,7 +203,7 @@ Rules:
 ### `start.sh` changes
 
 1. 确认缺少 root Secret 时会明确失败。
-2. 确认公开 URL 推导、`MINIO_SERVER_URL` 去尾 `/`、`MINIO_BROWSER_REDIRECT_URL` 以 `/console/` 结尾。
+2. 确认公开 URL 推导、`MINIO_SERVER_URL` 去尾 `/`、覆盖值包含 `http://` 或 `https://` scheme、`MINIO_BROWSER_REDIRECT_URL` 以 `/console/` 结尾。
 3. 推送后检查 runtime logs，确认 Nginx config test、API URL 和 WebUI URL 正确。
 
 ### `nginx.conf` changes

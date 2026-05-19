@@ -53,6 +53,16 @@ scripts/validate-contract.sh
 scripts/validate-contract.sh --remote
 ```
 
+需要做凭证型 S3 smoke test 且不想安装 `aws` 或 `mc` 时，可以使用仓库脚本：
+
+```bash
+MINIO_ROOT_USER='<access-key>' \
+MINIO_ROOT_PASSWORD='<secret-key>' \
+scripts/smoke-s3-curl.sh
+```
+
+这个脚本会先拒绝已有 bucket，再创建临时 bucket 和对象，验证签名读写、默认匿名拒绝、public read policy 和匿名直链，然后清理临时资源。
+
 ## 当前非目标
 
 这个 Space 不是生产级对象存储，不建议承载唯一数据源。

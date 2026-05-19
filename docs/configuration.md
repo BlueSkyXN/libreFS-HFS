@@ -113,6 +113,8 @@ HF Volume:
 
 除非同步修改 `nginx.conf`，不要随意修改 `LIBREFS_API_ADDR`、`LIBREFS_CONSOLE_ADDR` 和 `NGINX_CONF`。
 
+如果覆盖 `MINIO_SERVER_URL`，值必须包含 `http://` 或 `https://` scheme，`start.sh` 会去掉多余尾部 `/`。如果覆盖 `MINIO_BROWSER_REDIRECT_URL`，值必须仍然落在 `/console/` 子路径；脚本会补齐末尾 `/`，但不会接受其他 Console 路径。
+
 ## 端口
 
 | 端口 | 范围 | 用途 |

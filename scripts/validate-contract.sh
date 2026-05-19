@@ -50,7 +50,7 @@ require_pattern() {
   local pattern="$2"
   local message="$3"
 
-  if ! grep -Eq "$pattern" "$file"; then
+  if ! grep -Eq -- "$pattern" "$file"; then
     echo "Contract check failed: $message" >&2
     echo "Missing pattern in $file: $pattern" >&2
     exit 1
@@ -60,7 +60,9 @@ require_pattern() {
 check "whitespace and conflict-marker check" git diff --check -- \
   README.md docs Dockerfile start.sh nginx.conf .dockerignore .gitignore .gitattributes AGENTS.md scripts
 
-check "start.sh syntax" bash -n start.sh
+check "shell script syntax" bash -n start.sh
+bash -n scripts/smoke-s3-curl.sh
+test -x scripts/smoke-s3-curl.sh
 
 check "README front matter" require_pattern README.md '^sdk: docker$' 'README.md must keep sdk: docker'
 require_pattern README.md '^app_port: 7860$' 'README.md must keep app_port: 7860'
@@ -77,7 +79,12 @@ require_pattern start.sh 'MINIO_ROOT_PASSWORD' 'start.sh must require MINIO_ROOT
 require_pattern start.sh 'PUBLIC_BASE_URL' 'start.sh must honor PUBLIC_BASE_URL'
 require_pattern start.sh 'SPACE_HOST' 'start.sh must derive from SPACE_HOST'
 require_pattern start.sh 'MINIO_BROWSER_REDIRECT_URL.*console/' 'Console redirect URL must include /console/'
+require_pattern start.sh 'MINIO_BROWSER_REDIRECT_URL must end with /console/' 'Console redirect override must be validated'
+require_pattern start.sh 'MINIO_SERVER_URL must start with http:// or https://' 'S3 public URL must include a scheme'
 require_pattern start.sh 'nginx -t -c "\$NGINX_CONF"' 'start.sh must validate Nginx config before starting'
+
+check "S3 smoke script contract" require_pattern scripts/smoke-s3-curl.sh '--aws-sigv4' 'S3 smoke test must use curl SigV4 support'
+require_pattern scripts/smoke-s3-curl.sh 'Refusing to use bucket' 'S3 smoke test must refuse existing buckets'
 
 check "nginx routing contract" require_pattern nginx.conf 'listen 7860;' 'Nginx must listen on HF app port 7860'
 require_pattern nginx.conf 'location = /console' 'Nginx must normalize /console'
