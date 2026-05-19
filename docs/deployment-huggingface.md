@@ -51,12 +51,14 @@ hf spaces secrets list BlueSkyXN/libreFS-HFS
 | `LIBREFS_COMMIT` | `HEAD` | 想让 Docker build 校验精确 commit 时设置。 |
 | `GO_VERSION` | `1.26.3` | 上游 libreFS 要求不同 Go 版本时再改。 |
 
+Docker Space 会把 Variables 传给 Docker build 作为 build args，也会在 runtime 注入为环境变量。
+
 示例：
 
 ```bash
 hf spaces variables add BlueSkyXN/libreFS-HFS \
-  -v LIBREFS_REF=master \
-  -v LIBREFS_COMMIT=HEAD
+  -e LIBREFS_REF=master \
+  -e LIBREFS_COMMIT=HEAD
 ```
 
 ## 存储挂载
@@ -81,10 +83,10 @@ CLI 提示通常类似：
 
 ```bash
 hf spaces volumes set BlueSkyXN/libreFS-HFS \
-  -v hf://<repo_type>/<repo_id>:/data
+  -v hf://buckets/<namespace>/<bucket-name>:/data
 ```
 
-需要替换成你账号里真实的 bucket URI。
+需要替换成你账号里真实的 Storage Bucket URI。`buckets` 类型默认可读写，适合挂载到 libreFS 的 `/data`。
 
 ## 推送与重建
 

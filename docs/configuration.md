@@ -54,6 +54,8 @@ fatal: couldn't find remote ref main
 | `LIBREFS_COMMIT` | 否 | `HEAD` | build-time commit assertion。 |
 | `GO_VERSION` | 否 | `1.26.3` | build-time Go version。 |
 
+Docker Space 会把 Space Variables 作为 build-time `ARG` 传给 Docker build，也会在 runtime 注入为环境变量。因此 `GO_VERSION`、`LIBREFS_REF` 和 `LIBREFS_COMMIT` 可以通过 Space Variables 覆盖 Dockerfile 默认值。
+
 Hugging Face runtime 会提供 `SPACE_HOST`。当前 Space 的公开 host 是：
 
 ```text
@@ -101,6 +103,7 @@ HF Space 外部只暴露 `7860`。
 | --- | --- |
 | `location = /console` | 重定向到 `/console/`。 |
 | `location /console/` | 转发到 `127.0.0.1:9001/`，并剥掉 `/console/` 前缀。 |
+| Console iframe headers | 隐藏 upstream `X-Frame-Options`，并设置允许 Hugging Face 页面嵌入的 `Content-Security-Policy frame-ancestors`。 |
 | `location /` | 其余请求全部转发到 `127.0.0.1:9000`。 |
 
 Console proxy 必须使用：
@@ -110,6 +113,15 @@ proxy_pass http://127.0.0.1:9001/;
 ```
 
 末尾 `/` 是必需的。没有它时，`/console/static/...` 会被原样转发到上游 Console，导致 JS/CSS 请求返回 HTML，Console 页面无法正常加载。
+
+Console 代理还会处理 iframe 相关 header：
+
+```nginx
+proxy_hide_header X-Frame-Options;
+add_header Content-Security-Policy "frame-ancestors 'self' https://huggingface.co https://*.huggingface.co" always;
+```
+
+这只影响 `/console/` 代理，不改变 S3 API 根路径的 header 行为。
 
 ## 凭证处理原则
 

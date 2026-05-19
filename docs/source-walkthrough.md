@@ -261,6 +261,8 @@ Nginx 会传递：
 
 这些 header 影响 Console redirect、公开 URL 推导和反向代理后的请求识别。修改时要同步验证 Console 登录、S3 signed request 和公开对象 URL。
 
+Console 代理层还会隐藏 upstream `X-Frame-Options`，并添加 `Content-Security-Policy frame-ancestors`，用于允许 Hugging Face Space 页面通过 iframe 嵌入 Console。这个处理只放在 `/console/`，不要扩展到 S3 API 根路径，避免影响对象访问语义。
+
 ## `.dockerignore`
 
 `.dockerignore` 用来减少 Docker build context，避免把本地状态送到 HF 远端 build。
@@ -343,6 +345,7 @@ Nginx 会传递：
 - 根路径仍是 S3 API。
 - `/console` 会跳转到 `/console/`。
 - `/console/static/...` 返回正确 JS/CSS MIME。
+- `/console/` 响应不再暴露 `X-Frame-Options: DENY`，并包含允许 Hugging Face 页面嵌入的 `frame-ancestors`。
 - 上传大文件不会被 Nginx buffering 或 body size 限制拦住。
 
 ### 改 `README.md` front matter 后必须验证

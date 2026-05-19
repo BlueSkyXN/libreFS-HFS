@@ -73,6 +73,24 @@ content-type: text/css
 
 注意：上游 libreFS 更新后，asset 文件名可能变化。如果精确文件名不存在，先打开 `/console/`，从 HTML 中取当前 `static/js` 和 `static/css` 路径再测。
 
+## Console iframe header 检查
+
+Hugging Face Space 项目页会把 app 放进 `huggingface.co` 页面里的 iframe。Console upstream 如果返回 `X-Frame-Options: DENY`，浏览器会拒绝展示，表现为 Space 页面里 Console 加载失败。
+
+检查：
+
+```bash
+curl -fsSI https://blueskyxn-librefs-hfs.hf.space/console/ \
+  | tr -d '\r' \
+  | grep -Ei '^(x-frame-options|content-security-policy):'
+```
+
+预期：
+
+- 不应出现 `x-frame-options`。
+- 应出现包含 `frame-ancestors` 的 `content-security-policy`。
+- `frame-ancestors` 应允许 `https://huggingface.co`。
+
 ## Console 登录检查
 
 打开：

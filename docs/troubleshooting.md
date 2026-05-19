@@ -121,6 +121,47 @@ curl -fsSI https://blueskyxn-librefs-hfs.hf.space/console/static/js/main.45669c2
 content-type: text/javascript
 ```
 
+## Console 被 Hugging Face iframe 拦截
+
+### 现象
+
+浏览器 console 出现：
+
+```text
+Refused to display 'https://blueskyxn-librefs-hfs.hf.space/console/' in a frame because it set 'X-Frame-Options' to 'deny'.
+```
+
+### 原因
+
+Hugging Face Space 项目页会通过 iframe 嵌入运行时 app。libreFS Console upstream 可能返回：
+
+```text
+X-Frame-Options: DENY
+```
+
+浏览器会优先按该 header 拒绝 iframe 展示。
+
+### 处理
+
+在 `nginx.conf` 的 Console 代理层隐藏 upstream `X-Frame-Options`，并补充只允许本站和 Hugging Face 页面嵌入的 CSP：
+
+```nginx
+location /console/ {
+    proxy_hide_header X-Frame-Options;
+    add_header Content-Security-Policy "frame-ancestors 'self' https://huggingface.co https://*.huggingface.co" always;
+}
+```
+
+验证：
+
+```bash
+curl -fsSI https://blueskyxn-librefs-hfs.hf.space/console/ \
+  | tr -d '\r' \
+  | grep -Ei '^(x-frame-options|content-security-policy):'
+```
+
+预期不再出现 `x-frame-options`，且 CSP 包含 `frame-ancestors` 和 `https://huggingface.co`。
+
 ## `/console/api/v1/session` 返回 `403`
 
 ### 现象
