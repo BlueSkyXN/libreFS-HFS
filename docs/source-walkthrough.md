@@ -9,7 +9,7 @@
 - 不使用 libreFS 官方 Docker image。
 - 只对外暴露 Hugging Face Space 的 `7860` 端口。
 - 通过 Nginx 把 S3 API 和 Web Console 合并到同一个外部域名。
-- 默认数据目录为 `/data`，当前可以不挂载 Storage Bucket。
+- 默认数据目录为 `/data`；当前 `hf spaces volumes list` 显示已挂载 Storage Bucket，但仍需按操作验收确认数据读回。
 
 ## 文件总览
 
@@ -275,7 +275,9 @@ Console 代理层还会隐藏 upstream `X-Frame-Options`，并添加 `Content-Se
 | `.gitignore` | runtime 不需要。 |
 | `.DS_Store` | macOS 本地文件。 |
 | `*.log` | 本地日志。 |
+| `.env` / `.env.*` | 本地环境和 secret 台账。 |
 | `.data` | 本地测试数据目录。 |
+| `local` | 本地材料目录，不进入 build context。 |
 | `tmp` / `temp` | 临时目录。 |
 
 不要把 `README.md`、`Dockerfile`、`start.sh`、`nginx.conf` 或 `docs/` 加进 `.dockerignore`。其中 `README.md` 是 Space 元数据来源，`Dockerfile`/`start.sh`/`nginx.conf` 是构建和运行必需文件。
@@ -291,8 +293,10 @@ Console 代理层还会隐藏 upstream `X-Frame-Options`，并添加 `Content-Se
 | `.DS_Store` | macOS Finder 元数据。 |
 | `.data/` | 本地临时数据目录。 |
 | `*.log` | 本地日志。 |
+| `.env` / `.env.*` | 本地环境和 secret 台账；`.env.example` 可提交。 |
+| `/local` | 本地材料目录，不参与仓库提交。 |
 
-如果需要本地模拟数据，优先放在 `.data/`，不要提交到 Space 仓库。
+如果需要本地模拟数据，优先放在 `.data/`；本地材料放在 `local/`。两者都不要提交到 Space 仓库。
 
 ## `.gitattributes`
 
@@ -381,4 +385,4 @@ hf spaces logs BlueSkyXN/libreFS-HFS --tail 200
 hf spaces volumes list BlueSkyXN/libreFS-HFS
 ```
 
-当前没有挂载 Storage Bucket，这意味着 `/data` 数据可以用于测试和临时共享，但不能作为长期唯一存储。
+当前 `hf spaces volumes list` 显示已挂载 `BlueSkyXN/libreFS-HFS-storage` 到 `/data`。挂载状态仍应通过上传对象、重启 Space、读取对象、rebuild 后再次读取来验收。

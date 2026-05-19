@@ -39,10 +39,10 @@ https://blueskyxn-librefs-hfs.hf.space/console/
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | S3-compatible API | 可用 | 公开域名根路径 `/` 转发到 libreFS S3 API。 |
-| Web Console | 可用 | `/console/` 转发到 libreFS Web Console，已验证可登录。 |
-| 签名上传/下载 | 可用 | 已验证 AWS SigV4 path-style 基本读写。 |
-| HTTP 直链 | 可用 | bucket policy 允许匿名 `s3:GetObject` 后可直链访问。 |
-| 持久化 | 可选 | 当前不挂 HF Storage Bucket 也能运行，但数据不保证持久。 |
+| Web Console | 可用 | `/console/` 转发到 libreFS Web Console；公开页面、静态资源和 iframe header 已回读正常，登录需 root 凭证复测。 |
+| 签名上传/下载 | 需凭证验收 | 设计上走 AWS SigV4 path-style；涉及 Secret 的 smoke test 需在操作时重新执行。 |
+| HTTP 直链 | 条件可用 | bucket policy 允许匿名 `s3:GetObject` 后可直链访问。 |
+| 持久化 | 已挂载 / 需验收 | 当前 `hf spaces volumes list` 显示 Storage Bucket 挂载到 `/data`；仍需上传、重启、rebuild 后读取验证。 |
 | 生产对象存储 | 不建议 | HF Space 是应用托管环境，不是专用对象存储基础设施。 |
 
 ## 公开路由
@@ -123,7 +123,7 @@ https://blueskyxn-librefs-hfs.hf.space/<bucket>/<object>
 
 ## 已知边界
 
-- 如果没有把 Hugging Face Storage Bucket 挂载到 `/data`，上传对象可能在 Space 重启、重建、迁移或停止后丢失。
+- 当前 `hf spaces volumes list` 显示 `/data` 已挂载 Hugging Face Storage Bucket；如果后续移除挂载，上传对象可能在 Space 重启、重建、迁移或停止后丢失。
 - 当前 `cpu-basic` 硬件适合功能测试和轻量使用，不适合高吞吐对象存储。
 - 未签名浏览器直接访问根路径 `/` 可能返回 S3 XML error，这是正常现象；签名 S3 请求和配置了 policy 的对象直链才是预期访问方式。
 - 本仓库 license 使用 AGPL-3.0，因为 libreFS 本身是 AGPL-3.0。

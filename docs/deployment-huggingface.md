@@ -44,26 +44,42 @@ hf spaces secrets list BlueSkyXN/libreFS-HFS
 
 ## 可选 Variables
 
+默认部署不需要配置 HF Variables。不要把和代码默认值或 upstream 默认值相同的变量同步到 Hugging Face；这会让云端配置看起来像有很多“特殊设置”，实际只是噪音。
+
 | Variable | 默认值 | 什么时候设置 |
 | --- | --- | --- |
 | `PUBLIC_BASE_URL` | `https://${SPACE_HOST}` | 使用自定义域名或需要覆盖公开 URL 时设置。 |
-| `LIBREFS_REF` | `master` | 想固定上游 tag、branch 时设置。 |
-| `LIBREFS_COMMIT` | `HEAD` | 想让 Docker build 校验精确 commit 时设置。 |
+| `LIBREFS_REF` | `master` | 临时切换上游 tag、branch 时设置。 |
+| `LIBREFS_COMMIT` | `HEAD` | 想让 Docker build 校验精确 commit 时设置；长期 pin 更适合写进 `Dockerfile`。 |
 | `GO_VERSION` | `1.26.3` | 上游 libreFS 要求不同 Go 版本时再改。 |
 
 Docker Space 会把 Variables 传给 Docker build 作为 build args，也会在 runtime 注入为环境变量。
 
-示例：
+仅在确实需要覆盖默认值时再使用，例如临时 pin upstream commit：
 
 ```bash
 hf spaces variables add BlueSkyXN/libreFS-HFS \
   -e LIBREFS_REF=master \
-  -e LIBREFS_COMMIT=HEAD
+  -e LIBREFS_COMMIT='<upstream-commit-sha>'
 ```
+
+检查当前 Variables 是否保持精简：
+
+```bash
+hf spaces variables list BlueSkyXN/libreFS-HFS
+```
+
+默认预期是：
+
+```text
+No results found.
+```
+
+本地可以维护 `.env.local` 记录真实 secret 值、当前 host、Storage Bucket、默认值说明和临时覆盖候选。`.env.local` 必须被 Git ignore，不应提交。
 
 ## 存储挂载
 
-当前项目可以不挂载 Hugging Face Storage Bucket。在这种模式下，服务可运行，但 `/data` 是临时目录。
+当前项目建议挂载 Hugging Face Storage Bucket 到 `/data`。没有挂载时，服务可运行，但 `/data` 是临时目录。
 
 如果需要持久化，把 Hugging Face Storage Bucket 挂载到：
 
@@ -77,7 +93,14 @@ hf spaces variables add BlueSkyXN/libreFS-HFS \
 hf spaces volumes list BlueSkyXN/libreFS-HFS
 ```
 
-如果输出 `No results found`，说明当前对象数据不保证持久。
+当前线上 Space 回读应类似：
+
+```text
+type    source                          mount_path  read_only
+bucket  BlueSkyXN/libreFS-HFS-storage   /data       False
+```
+
+如果输出 `No results found`，说明对象数据不保证持久。
 
 CLI 提示通常类似：
 
@@ -90,16 +113,16 @@ hf spaces volumes set BlueSkyXN/libreFS-HFS \
 
 ## 推送与重建
 
-推送到 Hugging Face Space remote 后，Space 会自动 rebuild：
+当前本地 checkout 的 Hugging Face remote 名称是 `hf`，GitHub remote 名称是 `origin`。推送到 Hugging Face Space remote 后，Space 会自动 rebuild：
 
 ```bash
-git push origin main
+git push hf main
 ```
 
 确认远端 head：
 
 ```bash
-git ls-remote origin HEAD refs/heads/main
+git ls-remote hf HEAD refs/heads/main
 ```
 
 查看 Space 状态：

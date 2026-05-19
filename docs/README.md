@@ -27,21 +27,19 @@ Web Console:
 https://blueskyxn-librefs-hfs.hf.space/console/
 ```
 
-## 已验证能力
+## 当前能力边界
 
-当前线上实例已经验证：
+当前线上实例的公开健康检查和 Console 静态资源可直接复核；涉及 root 凭证的 S3 写入、公开策略和持久化读回，需要在操作时重新执行 smoke test。
 
 - Hugging Face 远端 Docker build 成功。
 - 从 Ubuntu + libreFS 源码编译，不使用官方 Docker image。
 - `cpu-basic` runtime 可启动。
 - Nginx 在 `7860` 上合并 S3 API 和 Web Console。
 - Web Console 可在 `/console/` 正常渲染。
-- Web Console 可登录并进入 Object Browser。
-- S3 SigV4 `ListBuckets`、创建 bucket、上传对象、读取对象可用。
-- bucket policy 放开匿名 `s3:GetObject` 后，HTTP 直链可用。
+- Web Console 登录、S3 SigV4 写入、公开直链和持久化读回需要 root 凭证或测试对象，不能只靠 health check 证明。
 
 ## 当前非目标
 
 这个 Space 不是生产级对象存储，不建议承载唯一数据源。
 
-当前部署可以不挂载 Hugging Face Storage Bucket。如果不挂载，`/data` 内的数据应视为临时数据，适合测试、临时共享和短期直链，不适合作长期保存。
+当前 `hf spaces volumes list` 显示已经把 Storage Bucket 挂载到 `/data`。挂载只证明路径具备持久化条件；只有完成“上传对象 -> 重启 Space -> 读取对象 -> rebuild 后再次读取”后，才能把某次数据持久性验收视为通过。
