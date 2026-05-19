@@ -43,6 +43,29 @@ curl -fsS https://blueskyxn-librefs-hfs.hf.space/minio/health/ready \
 health_http=200
 ```
 
+## 本地契约检查
+
+不本地 build libreFS 时，先运行仓库自带的轻量检查：
+
+```bash
+scripts/validate-contract.sh
+```
+
+这会检查：
+
+- Markdown 和配置 diff 是否存在 whitespace 或 conflict marker。
+- `start.sh` Bash 语法。
+- `README.md` front matter 是否仍是 Docker Space、`app_port: 7860` 和 AGPL-3.0。
+- `Dockerfile` 是否保持 Ubuntu builder/runtime、远端源码构建和 `7860` healthcheck。
+- `nginx.conf` 是否保持 `/console/`、S3 根路径、iframe header 和单端口契约。
+- 本机如果安装了 `nginx`，会运行 `nginx -t -c "$PWD/nginx.conf"`。
+
+需要顺手检查公开 health endpoint 时：
+
+```bash
+scripts/validate-contract.sh --remote
+```
+
 ## Console 静态资源检查
 
 这个检查用于发现最常见的反代问题：`/console/` HTML 能打开，但 JS/CSS 被返回成 `text/html`，导致页面空白。
