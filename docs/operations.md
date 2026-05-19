@@ -122,7 +122,7 @@ https://blueskyxn-librefs-hfs.hf.space/console/
 7. 匿名 HTTP 直链读取返回 `200`。
 8. 清理 policy、object、bucket。
 
-最近一次远端 smoke test 已确认以上链路全部通过。
+这组检查需要 root 凭证和临时测试对象。公开 health check、Console 静态资源或 Space `RUNNING` 只能证明服务入口正常，不能替代签名 S3 smoke test。
 
 ## 日志
 
@@ -157,13 +157,55 @@ hf spaces restart BlueSkyXN/libreFS-HFS
 
 修改 Secrets 或 Variables 也可能触发 rebuild 或 restart。
 
-## 持久化检查
+## 环境配置维护
 
-当前已知状态：
+当前线上 Space 回读到的云端配置模型是：
 
 ```text
-storage: null
-volumes: No results found
+HF Secrets:
+- MINIO_ROOT_USER
+- MINIO_ROOT_PASSWORD
+
+HF Variables:
+- empty
+
+HF Volume:
+- BlueSkyXN/libreFS-HFS-storage -> /data
+```
+
+维护原则：
+
+1. 和代码默认值一致的内容不要配置成 HF Variables。
+2. upstream libreFS 默认值不要在 HF Variables 里重复声明。
+3. Secret 真实值只保存在 HF Secrets 和本地 `.env.local`，不要提交进仓库。
+4. `.env.local` 是本地台账，不是 runtime 自动加载文件；它用于记录默认值、覆盖候选和不能从 HF 回读的 secret value。
+5. 只有自定义域名、临时排障、临时切 upstream ref 或明确 commit pin 时，才新增 HF Variables。
+
+检查云端是否保持精简：
+
+```bash
+hf spaces variables list BlueSkyXN/libreFS-HFS
+hf spaces secrets list BlueSkyXN/libreFS-HFS
+hf spaces volumes list BlueSkyXN/libreFS-HFS
+```
+
+当前预期：
+
+```text
+variables: No results found.
+secrets: MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
+volume: BlueSkyXN/libreFS-HFS-storage -> /data
+```
+
+## 持久化检查
+
+当前已知状态（以 `hf spaces volumes list` 回读为准）：
+
+```text
+type: bucket
+source: BlueSkyXN/libreFS-HFS-storage
+mount_path: /data
+read_only: False
 ```
 
 重新检查：
@@ -172,9 +214,9 @@ volumes: No results found
 hf spaces volumes list BlueSkyXN/libreFS-HFS
 ```
 
-如果没有 volume，数据不持久。当前用途可以接受这个限制，但不要把对象当成长期唯一副本。
+如果没有 volume，数据不持久。当前线上 Space 应保持 `BlueSkyXN/libreFS-HFS-storage` 挂载到 `/data`。
 
-如果后续挂载 Storage Bucket 到 `/data`，需要做持久化验收：
+挂载 Storage Bucket 到 `/data` 后，需要做持久化验收：
 
 1. 上传对象。
 2. 重启 Space。
@@ -188,7 +230,7 @@ hf spaces volumes list BlueSkyXN/libreFS-HFS
 
 | 风险 | 影响 | 当前状态 | 处理方式 |
 | --- | --- | --- | --- |
-| 未挂载持久化 storage | 对象可能丢失 | 当前接受 | 重要文件保留其他副本；需要持久化时挂载 `/data`。 |
+| 未挂载持久化 storage | 对象可能丢失 | 当前 `hf spaces volumes list` 显示已挂载 `/data` bucket | 如发现 volume 缺失，先停止写入并恢复挂载。 |
 | HF Space sleep/restart | 可能短时不可用 | 预期行为 | 作为轻量服务使用。 |
 | libreFS 上游 `master` 变化 | rebuild 行为可能变化 | 部分受控 | 需要稳定时设置 `LIBREFS_COMMIT`。 |
 | Console 子路径回归 | Console 页面空白 | 当前已修复 | 检查 JS/CSS MIME 和登录页。 |
@@ -198,7 +240,7 @@ hf spaces volumes list BlueSkyXN/libreFS-HFS
 ## 每次推送后的建议检查
 
 ```bash
-git ls-remote origin HEAD refs/heads/main
+git ls-remote hf HEAD refs/heads/main
 
 curl -fsSL https://huggingface.co/api/spaces/BlueSkyXN/libreFS-HFS \
   | jq '{sha, stage: .runtime.stage, error: .runtime.errorMessage}'

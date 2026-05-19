@@ -98,7 +98,7 @@ libreFS 将对象数据和元数据写到：
 
 如果没有挂载 Hugging Face Storage Bucket，`/data` 是容器本地临时目录。它适合短期测试和临时文件共享，但不保证持久。
 
-如果后续把 Hugging Face Storage Bucket 挂载到 `/data`，需要重新做“上传对象 -> 重启 Space -> 读取对象 -> rebuild 后再次读取”的持久化验收。
+当前 `hf spaces volumes list` 显示已经把 `BlueSkyXN/libreFS-HFS-storage` 挂载到 `/data`。挂载只证明路径具备持久化条件；仍需要重新做“上传对象 -> 重启 Space -> 读取对象 -> rebuild 后再次读取”的持久化验收。
 
 ## 安全模型
 

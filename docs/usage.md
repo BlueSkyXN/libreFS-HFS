@@ -185,7 +185,9 @@ artifacts
 
 ## 数据持久性
 
-如果没有把 Hugging Face Storage Bucket 挂载到 `/data`，上传文件应视为临时数据。
+当前 `hf spaces volumes list` 显示已经把 Hugging Face Storage Bucket 挂载到 `/data`。如果后续移除挂载，上传文件应视为临时数据。
+
+即使存在挂载，也建议在关键变更后做一次“上传对象 -> 重启 Space -> 读取对象 -> rebuild 后再次读取”的验收，再把对象当作已通过持久化验证的数据。
 
 重要文件请同时保存在其他持久位置，例如：
 

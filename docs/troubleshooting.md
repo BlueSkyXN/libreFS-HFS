@@ -245,7 +245,7 @@ Space 没有挂载 Hugging Face Storage Bucket。服务仍然可以运行，但 
 
 ### 当前决策
 
-当前用途接受这个限制。重要文件仍应保留在其他持久位置。
+当前线上 Space 应保持 Storage Bucket 挂载到 `/data`。如果该命令返回 `No results found`，说明云端配置漂移，应先恢复挂载；重要文件仍应保留在其他持久位置，直到完成重启和 rebuild 后读回验收。
 
 ## `WARN: Detected GOMAXPROCS(2) < NumCPU(16)`
 

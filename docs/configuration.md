@@ -47,12 +47,14 @@ fatal: couldn't find remote ref main
 
 ## Hugging Face Variables
 
-| Variable | 必需 | 默认值 | 说明 |
+原则：不要把和代码默认值、upstream 默认值相同的配置同步到 Hugging Face Variables。Variables 只用于表达“这个 Space 明确要覆盖默认行为”。当前默认部署下，HF Variables 可以为空。
+
+| Variable | 必需 | 默认值 | 什么时候设置 |
 | --- | --- | --- | --- |
-| `PUBLIC_BASE_URL` | 否 | `https://${SPACE_HOST}` | 公开根 URL。 |
-| `LIBREFS_REF` | 否 | `master` | build-time source ref。 |
-| `LIBREFS_COMMIT` | 否 | `HEAD` | build-time commit assertion。 |
-| `GO_VERSION` | 否 | `1.26.3` | build-time Go version。 |
+| `PUBLIC_BASE_URL` | 否 | `https://${SPACE_HOST}` | 只有使用自定义域名或需要临时覆盖公开根 URL 时设置。 |
+| `LIBREFS_REF` | 否 | `master` | 只有要临时切 upstream branch/tag 时设置。 |
+| `LIBREFS_COMMIT` | 否 | `HEAD` | 只有要在 HF Variables 层做精确 commit pin 时设置；长期 pin 更适合写进 `Dockerfile` 默认值。 |
+| `GO_VERSION` | 否 | `1.26.3` | 只有 upstream 明确要求更换 Go 版本时设置。 |
 
 Docker Space 会把 Space Variables 作为 build-time `ARG` 传给 Docker build，也会在 runtime 注入为环境变量。因此 `GO_VERSION`、`LIBREFS_REF` 和 `LIBREFS_COMMIT` 可以通过 Space Variables 覆盖 Dockerfile 默认值。
 
@@ -61,6 +63,40 @@ Hugging Face runtime 会提供 `SPACE_HOST`。当前 Space 的公开 host 是：
 ```text
 blueskyxn-librefs-hfs.hf.space
 ```
+
+当前线上 Space 的推荐最小状态：
+
+```text
+HF Secrets:
+- MINIO_ROOT_USER
+- MINIO_ROOT_PASSWORD
+
+HF Variables:
+- empty
+
+HF Volume:
+- BlueSkyXN/libreFS-HFS-storage -> /data
+```
+
+默认值维护规则：
+
+- 代码已有默认值的配置留在 `Dockerfile` / `start.sh`，不要同步到 HF Variables。
+- upstream libreFS 默认值保持 upstream 行为，不在 HF Variables 里重复声明。
+- 需要记录“当前理解”和真实 Secret 值时，写到本地 `.env.local`，不要提交。
+- 只有自定义域名、临时排障、临时切 branch/tag、或明确需要 commit pin 时，才新增 HF Variables。
+
+## 本地 `.env.local`
+
+可以在仓库根目录维护 `.env.local` 作为本地配置台账。它用于记录：
+
+- HF Space id、公开 host、Storage Bucket 和挂载点。
+- `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` 的真实值。
+- 关键配置项的默认来源、默认值和是否建议同步到 HF。
+- 临时覆盖值的候选项。
+
+`.env.local` 不是 runtime 自动加载文件，也不是部署契约；它只是本地审计和操作前核对用的台账。仓库 `.gitignore` 应忽略 `.env` 和 `.env.*`，只允许提交 `.env.example` 这类不含真实 secret 的占位模板。
+
+`.dockerignore` 也应忽略 `.env`、`.env.*` 和 `local/`，避免本地 Docker build context 把私有台账或本地材料带进镜像构建。
 
 ## Runtime Environment Variables
 
