@@ -87,6 +87,7 @@ libreFS 继承 MinIO-compatible 环境变量：
 | `MINIO_BROWSER_REDIRECT_URL` | `<public-base>/console/` | 让 Console 知道自己挂在 `/console/` 子路径下。 |
 
 当 `MINIO_BROWSER_REDIRECT_URL` 带 path 时，libreFS 会把这个 path 传给内置 Console 作为 `CONSOLE_SUBPATH`。
+为避免覆盖值破坏单端口路由契约，`start.sh` 会拒绝缺少 `http://` 或 `https://` scheme 的 `MINIO_SERVER_URL`，也会拒绝不以 `/console/` 结尾的 `MINIO_BROWSER_REDIRECT_URL`。
 
 ## 数据目录
 

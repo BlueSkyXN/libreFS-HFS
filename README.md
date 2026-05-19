@@ -40,7 +40,7 @@ https://blueskyxn-librefs-hfs.hf.space/console/
 | --- | --- | --- |
 | S3-compatible API | 可用 | 公开域名根路径 `/` 转发到 libreFS S3 API。 |
 | Web Console | 可用 | `/console/` 转发到 libreFS Web Console；公开页面、静态资源和 iframe header 已回读正常，登录需 root 凭证复测。 |
-| 签名上传/下载 | 需凭证验收 | 设计上走 AWS SigV4 path-style；涉及 Secret 的 smoke test 需在操作时重新执行。 |
+| 签名上传/下载 | 需凭证验收 | 设计上走 AWS SigV4 path-style；仓库提供 `scripts/smoke-s3-curl.sh`，涉及 Secret 的 smoke test 需在操作时重新执行。 |
 | HTTP 直链 | 条件可用 | bucket policy 允许匿名 `s3:GetObject` 后可直链访问。 |
 | 持久化 | 已挂载 / 需验收 | 当前 `hf spaces volumes list` 显示 Storage Bucket 挂载到 `/data`；仍需上传、重启、rebuild 后读取验证。 |
 | 生产对象存储 | 不建议 | HF Space 是应用托管环境，不是专用对象存储基础设施。 |

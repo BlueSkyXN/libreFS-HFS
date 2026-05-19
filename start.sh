@@ -19,10 +19,21 @@ fi
 
 export MINIO_SERVER_URL="${MINIO_SERVER_URL:-$public_base}"
 export MINIO_SERVER_URL="${MINIO_SERVER_URL%/}"
+case "$MINIO_SERVER_URL" in
+  http://*|https://*) ;;
+  *)
+    echo "MINIO_SERVER_URL must start with http:// or https://: $MINIO_SERVER_URL" >&2
+    exit 1
+    ;;
+esac
 
 export MINIO_BROWSER_REDIRECT_URL="${MINIO_BROWSER_REDIRECT_URL:-${MINIO_SERVER_URL}/console/}"
 if [[ "$MINIO_BROWSER_REDIRECT_URL" != */ ]]; then
   export MINIO_BROWSER_REDIRECT_URL="${MINIO_BROWSER_REDIRECT_URL}/"
+fi
+if [[ "$MINIO_BROWSER_REDIRECT_URL" != */console/ ]]; then
+  echo "MINIO_BROWSER_REDIRECT_URL must end with /console/: $MINIO_BROWSER_REDIRECT_URL" >&2
+  exit 1
 fi
 
 mkdir -p \

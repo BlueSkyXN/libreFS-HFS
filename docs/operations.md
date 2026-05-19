@@ -147,6 +147,38 @@ https://blueskyxn-librefs-hfs.hf.space/console/
 
 这组检查需要 root 凭证和临时测试对象。公开 health check、Console 静态资源或 Space `RUNNING` 只能证明服务入口正常，不能替代签名 S3 smoke test。
 
+仓库提供一个不依赖 `aws`、`mc` 或其他第三方 CLI 的 curl 版本：
+
+```bash
+MINIO_ROOT_USER='<access-key>' \
+MINIO_ROOT_PASSWORD='<secret-key>' \
+scripts/smoke-s3-curl.sh
+```
+
+脚本会使用 `curl --aws-sigv4` 执行：
+
+1. 签名 `ListBuckets`。
+2. 确认临时 bucket 不存在，避免误操作已有 bucket。
+3. 创建临时 bucket。
+4. 上传临时对象。
+5. 签名下载并比对对象内容。
+6. 验证配置公开策略前匿名读取返回 `403`。
+7. 写入 public read bucket policy。
+8. 验证匿名 HTTP 直链返回对象内容。
+9. 清理 policy、object 和 bucket。
+
+可选覆盖项：
+
+```bash
+S3_ENDPOINT='https://blueskyxn-librefs-hfs.hf.space'
+AWS_REGION='us-east-1'
+S3_SMOKE_BUCKET='librefs-hfs-smoke-manual'
+S3_SMOKE_OBJECT='smoke.txt'
+S3_SMOKE_PAYLOAD='hello from smoke test'
+```
+
+这个脚本会修改线上对象存储状态，只应在确认 root 凭证和临时 bucket 名称后运行。脚本会拒绝 HEAD 已存在的 bucket，但仍建议使用自动生成的临时 bucket 名。它不验证 `/data` 在 restart 或 rebuild 后的持久化读回。
+
 ## 日志
 
 查看 build logs：
