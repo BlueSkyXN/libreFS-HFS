@@ -49,17 +49,42 @@ shutdown() {
   wait "$LIBREFS_PID" "$NGINX_PID" 2>/dev/null || true
 }
 
-trap shutdown INT TERM
+terminate() {
+  shutdown
+  exit 0
+}
+
+wait_for_exit() {
+  local name="$1"
+  local pid="$2"
+  local rc=0
+
+  if wait "$pid"; then
+    rc=0
+  else
+    rc=$?
+  fi
+
+  if [[ "$rc" -eq 0 ]]; then
+    echo "$name exited unexpectedly with status 0" >&2
+    status=1
+  else
+    echo "$name exited with status $rc" >&2
+    status="$rc"
+  fi
+}
+
+trap terminate INT TERM
 
 status=0
 while true; do
   if ! kill -0 "$LIBREFS_PID" 2>/dev/null; then
-    wait "$LIBREFS_PID" || status=$?
+    wait_for_exit "librefs" "$LIBREFS_PID"
     break
   fi
 
   if ! kill -0 "$NGINX_PID" 2>/dev/null; then
-    wait "$NGINX_PID" || status=$?
+    wait_for_exit "nginx" "$NGINX_PID"
     break
   fi
 

@@ -13,6 +13,7 @@
 | [使用指南](usage.md) | 说明 Web Console、S3 endpoint、S3 client、公开直链和 bucket policy。 |
 | [运维与验收](operations.md) | 记录健康检查、smoke test、runtime logs、rebuild 检查和运行风险。 |
 | [故障排查](troubleshooting.md) | 汇总本项目真实遇到过的 build/runtime/Console/S3 问题。 |
+| [开发状态与下一步计划](development-plan.md) | 汇总当前实现、未完成事项、优先级和近期开发计划。 |
 
 ## 当前线上实例
 
@@ -37,6 +38,20 @@ https://blueskyxn-librefs-hfs.hf.space/console/
 - Nginx 在 `7860` 上合并 S3 API 和 Web Console。
 - Web Console 可在 `/console/` 正常渲染。
 - Web Console 登录、S3 SigV4 写入、公开直链和持久化读回需要 root 凭证或测试对象，不能只靠 health check 证明。
+
+## 本地轻量验证
+
+不安装项目依赖、不本地编译 libreFS 时，可以先运行仓库契约检查：
+
+```bash
+scripts/validate-contract.sh
+```
+
+需要同时检查公开健康端点时：
+
+```bash
+scripts/validate-contract.sh --remote
+```
 
 ## 当前非目标
 

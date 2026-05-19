@@ -22,6 +22,7 @@
 | `.dockerignore` | 是 | 控制 Docker build context，避免把本地临时文件送到远端 build。 |
 | `.gitattributes` | 是 | Hugging Face 仓库的 LFS 类型规则。 |
 | `.gitignore` | 否 | 本地 Git 忽略规则。 |
+| `scripts/validate-contract.sh` | 否 | 本地轻量契约验证入口，不编译 libreFS。 |
 | `docs/*.md` | 否 | 文档，不参与 runtime，但会触发 Space rebuild。 |
 
 ## `README.md`
@@ -325,6 +326,28 @@ Console 代理层还会隐藏 upstream `X-Frame-Options`，并添加 `Content-Se
 | `docs/operations.md` | 健康检查、smoke test、日志、重启和风险矩阵。 |
 | `docs/troubleshooting.md` | 已遇到过的真实故障和判断方法。 |
 | `docs/source-walkthrough.md` | 仓库逐文件说明和修改边界。 |
+| `docs/development-plan.md` | 当前实现、未完成事项、优先级和下一步计划。 |
+
+## `scripts/validate-contract.sh`
+
+这个脚本用于低成本检查本仓部署契约，不安装项目依赖，也不在本地编译 libreFS。
+
+默认检查：
+
+- `git diff --check`。
+- `start.sh` Bash 语法。
+- `README.md` front matter。
+- `Dockerfile` 的 Ubuntu build/runtime、upstream source build、`EXPOSE 7860` 和 healthcheck。
+- `start.sh` 的 Secret 校验、公开 URL 推导、Console redirect URL 和 Nginx 配置预检。
+- `nginx.conf` 的 `7860` 监听、`/console/` 子路径、S3 根路径和 iframe header。
+- `LICENSE` 是否仍是 AGPL-3.0。
+- 如果本机安装了 `nginx`，运行 `nginx -t -c "$PWD/nginx.conf"`。
+
+加上 `--remote` 时，会额外检查公开 health endpoint：
+
+```bash
+scripts/validate-contract.sh --remote
+```
 
 ## 修改边界
 

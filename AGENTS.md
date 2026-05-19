@@ -64,6 +64,8 @@ Rules:
 | `git status --short --branch` | 查看当前分支和未提交改动 | local repo | 只读；默认可运行 |
 | `git remote -v` | 确认 `hf` / `origin` 远端职责 | local repo | 只读；默认可运行 |
 | `git diff --check` | 检查 whitespace/error marker | local repo | 只读；默认可运行 |
+| `scripts/validate-contract.sh` | 汇总检查 front matter、Dockerfile、start.sh、nginx.conf、license 和本机 Nginx 语法 | local repo | 只读；不安装依赖、不本地编译 libreFS |
+| `scripts/validate-contract.sh --remote` | 在本地契约检查基础上额外检查公开 health endpoint | local + remote Space | 需要网络；不读取 Secret、不修改 Space |
 | `mkdir -p /tmp/nginx/client_body /tmp/nginx/proxy /tmp/nginx/fastcgi /tmp/nginx/uwsgi /tmp/nginx/scgi && nginx -t -c "$PWD/nginx.conf"` | 本地校验 Nginx 配置语法 | `nginx.conf` | 需要本机安装 `nginx`；不启动服务 |
 | `nginx -t -c "$NGINX_CONF"` | runtime 启动前校验 Nginx 配置 | container runtime | 容器内命令；需先创建 `/tmp/nginx/*` 临时目录 |
 | `curl -fsS https://blueskyxn-librefs-hfs.hf.space/minio/health/ready -o /dev/null -w 'health_http=%{http_code}\n'` | 检查公开健康端点 | remote Space | 需要网络；预期 `health_http=200` |
