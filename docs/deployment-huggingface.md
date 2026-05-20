@@ -56,6 +56,7 @@ hf spaces secrets list BlueSkyXN/libreFS-HFS
 | `LIBREFS_COMMIT` | `HEAD` | 想让 Docker build 校验精确 commit 时设置；长期 pin 更适合写进 `Dockerfile`。 |
 | `GO_VERSION` | `1.26.3` | 上游 libreFS 要求不同 Go 版本时再改。 |
 | `ADMIN_ENABLED` | `false` | 只有明确需要开启 `/_admin/` 时设置为 `true`。 |
+| `CONTROL_PLANE_DEFAULT_LANG` | `en` | 需要改变 `/_ops/` 和 `/_admin/` JSON 文案默认语言时设置；支持 `en`、`zh-CN`。 |
 
 Docker Space 会把 Variables 传给 Docker build 作为 build args，也会在 runtime 注入为环境变量。
 

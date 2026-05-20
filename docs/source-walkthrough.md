@@ -183,6 +183,7 @@ https://blueskyxn-librefs-hfs.hf.space/minio/health/ready
 | `ADMIN_HOST` | `127.0.0.1` | admin-service bind host。 |
 | `ADMIN_PORT` | `8082` | admin-service port。 |
 | `ADMIN_AUDIT_LOG` | `/data/logs/admin-audit.jsonl` | admin action 审计日志。 |
+| `CONTROL_PLANE_DEFAULT_LANG` | `en` | ops/admin JSON 文案默认语言；支持 `en`、`zh-CN`。 |
 
 外部只访问 `7860`，`9000` 和 `9001` 不直接暴露给 Hugging Face 外部网络。
 
