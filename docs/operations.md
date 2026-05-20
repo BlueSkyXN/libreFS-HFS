@@ -88,6 +88,19 @@ curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
 
 `/_ops/config` 只返回非敏感配置摘要和 Secret 是否存在，不返回 Secret 原文。`/_ops/metrics` 返回 Prometheus text format，但仍需要 token。
 
+ops/admin JSON 文案支持中文和英文。脚本或管理页面可以显式传：
+
+```bash
+curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
+  -H "X-Control-Language: zh-CN" \
+  "https://blueskyxn-librefs-hfs.hf.space/_ops/config"
+
+curl -fsS -H "X-Admin-Token: $ADMIN_TOKEN" \
+  "https://blueskyxn-librefs-hfs.hf.space/_admin/api/actions?lang=zh-CN"
+```
+
+未显式传语言时，服务会按 `Accept-Language` 选择；没有浏览器语言时默认英文。机器可读的 `error` 和 action `name` 保持英文稳定，管理界面应展示 `message`、`label`、`description` 和 `risk`。
+
 ## Admin 管理入口
 
 `/_admin/` 默认关闭：

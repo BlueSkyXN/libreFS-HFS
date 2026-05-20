@@ -58,6 +58,7 @@ fatal: couldn't find remote ref main
 | `LIBREFS_COMMIT` | 否 | `HEAD` | 只有要在 HF Variables 层做精确 commit pin 时设置；长期 pin 更适合写进 `Dockerfile` 默认值。 |
 | `GO_VERSION` | 否 | `1.26.3` | 只有 upstream 明确要求更换 Go 版本时设置。 |
 | `ADMIN_ENABLED` | 否 | `false` | 只有明确需要打开 `/_admin/` 时设置为 `true`。 |
+| `CONTROL_PLANE_DEFAULT_LANG` | 否 | `en` | 只有需要改变 `/_ops/` 和 `/_admin/` JSON 文案默认语言时设置；支持 `en`、`zh-CN`。 |
 
 Docker Space 会把 Space Variables 作为 build-time `ARG` 传给 Docker build，也会在 runtime 注入为环境变量。因此 `GO_VERSION`、`LIBREFS_REF` 和 `LIBREFS_COMMIT` 可以通过 Space Variables 覆盖 Dockerfile 默认值。
 
@@ -119,6 +120,7 @@ HF Volume:
 | `ADMIN_HOST` | `127.0.0.1` | admin-service bind host；不要和 Nginx 静态路由不一致。 |
 | `ADMIN_PORT` | `8082` | admin-service port；不要和 Nginx 静态路由不一致。 |
 | `ADMIN_AUDIT_LOG` | `/data/logs/admin-audit.jsonl` | admin action 审计日志。 |
+| `CONTROL_PLANE_DEFAULT_LANG` | `en` | ops/admin JSON 文案默认语言；支持 `en`、`zh-CN`。 |
 | `MINIO_SERVER_URL` | 从公开根 URL 推导 | 公开 S3 endpoint。 |
 | `MINIO_BROWSER_REDIRECT_URL` | `${MINIO_SERVER_URL}/console/` | 公开 Console URL。 |
 
@@ -201,6 +203,16 @@ curl -H "Authorization: Bearer $OPS_TOKEN" https://your-space.hf.space/_ops/heal
 ```
 
 `?token=` 只适合临时浏览器调试，不建议写进文档、脚本或分享链接。
+
+ops/admin JSON 文案支持 `en` 和 `zh-CN`。语言选择优先级：
+
+1. URL query：`?lang=zh-CN` 或 `?lang=en`
+2. Header：`X-Control-Language: zh-CN`
+3. Header：`Accept-Language`
+4. 环境变量：`CONTROL_PLANE_DEFAULT_LANG`
+5. 默认值：`en`
+
+`error`、action `name`、endpoint path 等机器可读字段保持稳定；`message`、`hint`、`label`、`description`、`risk` 和 `notes` 按语言返回，避免管理界面误读操作含义。
 
 `/_ops/config` 只返回 `MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`、`OPS_TOKEN`、`ADMIN_TOKEN` 是否存在，不返回真实值。
 

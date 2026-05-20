@@ -126,6 +126,8 @@ Web Console 也是公网可访问，但需要登录。
 
 `/_admin/` 是独立管理面，默认 `ADMIN_ENABLED=false`。开启时必须设置独立 `ADMIN_TOKEN`。当前白名单 action 只有 `run-health-checks` 和 `reload-nginx`，其中 `reload-nginx` 需要 `confirm=true` 并写入 `/data/logs/admin-audit.jsonl`。当前版本不提供 Web terminal、file manager、bucket/policy/root credential 管理或 `librefs` restart。
 
+ops/admin JSON 支持 `en` 和 `zh-CN` 文案。`error`、endpoint path 和 action `name` 保持机器可读稳定值；`message`、`hint`、`label`、`description`、`risk` 和 `notes` 按 `?lang=`、`X-Control-Language`、`Accept-Language` 或 `CONTROL_PLANE_DEFAULT_LANG` 返回对应语言，避免管理界面误读危险操作。
+
 匿名 HTTP 直链默认不可访问。只有 bucket policy 显式允许匿名 `s3:GetObject` 后，公开直链才会返回对象内容。
 
 Console 代理层会隐藏 upstream `X-Frame-Options`，并补充允许 Hugging Face 页面嵌入的 `Content-Security-Policy frame-ancestors`。这是为了让 Space 项目页里的 iframe 能正常展示 Console；直接访问 `https://blueskyxn-librefs-hfs.hf.space/console/` 时仍然需要 Console 登录。

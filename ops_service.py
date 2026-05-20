@@ -18,6 +18,35 @@ from typing import Any
 
 
 STARTED_AT = time.time()
+SUPPORTED_LANGUAGES = ("zh-CN", "en")
+DEFAULT_LANGUAGE = "en"
+
+MESSAGES = {
+    "root_description": {
+        "en": "Read-only diagnostics for LibreFS HFS.",
+        "zh-CN": "LibreFS HFS 只读诊断入口。",
+    },
+    "auth_required": {
+        "en": "Authentication is required.",
+        "zh-CN": "需要认证。",
+    },
+    "auth_hint": {
+        "en": "Send X-Ops-Token, Authorization: Bearer <token>, or ?token=<token>.",
+        "zh-CN": "请发送 X-Ops-Token、Authorization: Bearer <token>，或临时使用 ?token=<token>。",
+    },
+    "not_found": {
+        "en": "The requested ops endpoint was not found.",
+        "zh-CN": "请求的 ops 端点不存在。",
+    },
+    "secret_omitted": {
+        "en": "secret values are intentionally omitted",
+        "zh-CN": "Secret 原文已刻意省略。",
+    },
+    "admin_independent": {
+        "en": "ADMIN_ENABLED controls /_admin and is independent from OPS_TOKEN.",
+        "zh-CN": "ADMIN_ENABLED 控制 /_admin，并且与 OPS_TOKEN 相互独立。",
+    },
+}
 
 SAFE_CONFIG_KEYS = [
     "DATA_DIR",
@@ -64,6 +93,26 @@ def parse_bool(value: str, default: bool = False) -> bool:
     if value == "":
         return default
     return value.lower() in {"1", "true", "yes", "on"}
+
+
+def normalize_language(value: str) -> str:
+    lang = value.strip().lower().replace("_", "-")
+    if not lang:
+        return ""
+    if lang in {"zh", "zh-cn", "zh-hans", "cn"} or lang.startswith("zh-"):
+        return "zh-CN"
+    if lang == "en" or lang.startswith("en-"):
+        return "en"
+    return ""
+
+
+def text(message_key: str, language: str) -> str:
+    choices = MESSAGES.get(message_key, {})
+    return choices.get(language) or choices.get(DEFAULT_LANGUAGE) or message_key
+
+
+def localized_notes(message_keys: list[str], language: str) -> list[str]:
+    return [text(key, language) for key in message_keys]
 
 
 def host_port_from_addr(value: str, default_port: int) -> tuple[str, int]:
@@ -248,15 +297,14 @@ def system_payload() -> dict[str, Any]:
     }
 
 
-def config_payload() -> dict[str, Any]:
+def config_payload(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
     return {
         "ok": True,
+        "language": language,
+        "supported_languages": list(SUPPORTED_LANGUAGES),
         "safe_config": {key: env(key) for key in SAFE_CONFIG_KEYS if env(key) != ""},
         "secret_present": {key: bool(env(key)) for key in SECRET_KEYS},
-        "notes": [
-            "secret values are intentionally omitted",
-            "ADMIN_ENABLED controls /_admin and is independent from OPS_TOKEN",
-        ],
+        "notes": localized_notes(["secret_omitted", "admin_independent"], language),
     }
 
 
@@ -329,7 +377,22 @@ class Handler(BaseHTTPRequestHandler):
     def query(self) -> dict[str, list[str]]:
         return urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
 
+    def language(self) -> str:
+        query_lang = self.query().get("lang", [""])[0]
+        header_lang = self.headers.get("X-Control-Language", "")
+        for candidate in [query_lang, header_lang]:
+            selected = normalize_language(candidate)
+            if selected:
+                return selected
+        for candidate in self.headers.get("Accept-Language", "").split(","):
+            selected = normalize_language(candidate.split(";", 1)[0])
+            if selected:
+                return selected
+        return normalize_language(env("CONTROL_PLANE_DEFAULT_LANG", "")) or DEFAULT_LANGUAGE
+
     def send_json(self, payload: dict[str, Any], status: int = 200) -> None:
+        payload.setdefault("language", self.language())
+        payload.setdefault("supported_languages", list(SUPPORTED_LANGUAGES))
         data = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -365,11 +428,13 @@ class Handler(BaseHTTPRequestHandler):
     def require_auth(self) -> bool:
         if self.authenticated():
             return True
+        language = self.language()
         self.send_json(
             {
                 "ok": False,
                 "error": "unauthorized",
-                "hint": "send X-Ops-Token, Authorization: Bearer <token>, or ?token=<token>",
+                "message": text("auth_required", language),
+                "hint": text("auth_hint", language),
             },
             status=401,
         )
@@ -385,10 +450,12 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path in {"/", ""}:
+            language = self.language()
             self.send_json(
                 {
                     "ok": True,
                     "service": "librefs-hfs-ops",
+                    "description": text("root_description", language),
                     "endpoints": ["/health", "/system", "/config", "/version", "/metrics"],
                 }
             )
@@ -397,13 +464,16 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/system":
             self.send_json(system_payload())
         elif path == "/config":
-            self.send_json(config_payload())
+            self.send_json(config_payload(self.language()))
         elif path == "/version":
             self.send_json(version_payload())
         elif path == "/metrics":
             self.send_text(metrics_payload(), content_type="text/plain; version=0.0.4; charset=utf-8")
         else:
-            self.send_json({"ok": False, "error": "not_found", "path": path}, status=404)
+            self.send_json(
+                {"ok": False, "error": "not_found", "message": text("not_found", self.language()), "path": path},
+                status=404,
+            )
 
 
 def main() -> None:
