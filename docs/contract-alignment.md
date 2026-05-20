@@ -8,9 +8,9 @@
 
 | 项目 | 当前状态 | 证据命令 |
 | --- | --- | --- |
-| GitHub `origin/main` | `cc9504e2eb44e4155123bd5d55081f65a051d765` | `git ls-remote --heads origin main` |
-| Hugging Face `hf/main` | `cc9504e2eb44e4155123bd5d55081f65a051d765` | `git ls-remote --heads hf main` |
-| Space runtime | `RUNNING`，sha 为 `cc9504e2eb44e4155123bd5d55081f65a051d765` | `curl -fsSL https://huggingface.co/api/spaces/BlueSkyXN/libreFS-HFS` |
+| GitHub `origin/main` | 用命令回读最新 head。 | `git ls-remote --heads origin main` |
+| Hugging Face `hf/main` | 用命令回读最新 head。 | `git ls-remote --heads hf main` |
+| Space runtime | 应为 `RUNNING`；runtime sha 必须用命令回读，不在文档中硬编码。 | `curl -fsSL https://huggingface.co/api/spaces/BlueSkyXN/libreFS-HFS` |
 | HF Variables | `ADMIN_ENABLED=true` | `hf spaces variables list BlueSkyXN/libreFS-HFS` |
 | HF Secrets | `MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`、`OPS_TOKEN`、`ADMIN_TOKEN` 已存在；HF 不回显 value。 | `hf spaces secrets list BlueSkyXN/libreFS-HFS` |
 | HF Volume | `bucket BlueSkyXN/libreFS-HFS-storage -> /data`，`read_only=False` | `hf spaces volumes list BlueSkyXN/libreFS-HFS` |
