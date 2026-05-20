@@ -55,9 +55,10 @@ scripts/validate-contract.sh
 
 - Markdown 和配置 diff 是否存在 whitespace 或 conflict marker。
 - `start.sh` Bash 语法。
+- `ops_service.py` 和 `admin_service.py` Python 语法。
 - `README.md` front matter 是否仍是 Docker Space、`app_port: 7860` 和 AGPL-3.0。
 - `Dockerfile` 是否保持 Ubuntu builder/runtime、远端源码构建和 `7860` healthcheck。
-- `nginx.conf` 是否保持 `/console/`、S3 根路径、iframe header 和单端口契约。
+- `nginx.conf` 是否保持 `/_ops/`、`/_admin/`、`/console/`、S3 根路径、iframe header 和单端口契约。
 - 本机如果安装了 `nginx`，会运行 `nginx -t -c "$PWD/nginx.conf"`。
 
 需要顺手检查公开 health endpoint 时：
@@ -65,6 +66,70 @@ scripts/validate-contract.sh
 ```bash
 scripts/validate-contract.sh --remote
 ```
+
+## Ops 诊断入口
+
+`/_ops/` 是只读诊断面，默认需要 `OPS_TOKEN`。公开长期运行建议在 HF Secrets 中覆盖默认 demo token。
+
+常用检查：
+
+```bash
+OPS_TOKEN='<ops-token>'
+
+curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
+  https://blueskyxn-librefs-hfs.hf.space/_ops/health
+
+curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
+  https://blueskyxn-librefs-hfs.hf.space/_ops/system
+
+curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
+  https://blueskyxn-librefs-hfs.hf.space/_ops/config
+```
+
+`/_ops/config` 只返回非敏感配置摘要和 Secret 是否存在，不返回 Secret 原文。`/_ops/metrics` 返回 Prometheus text format，但仍需要 token。
+
+## Admin 管理入口
+
+`/_admin/` 默认关闭：
+
+```text
+ADMIN_ENABLED=false
+```
+
+默认关闭时：
+
+```bash
+curl -i https://blueskyxn-librefs-hfs.hf.space/_admin/
+```
+
+预期返回 `404`。
+
+只有明确需要受控管理能力时，才在 HF Secrets/Variables 中设置：
+
+```text
+ADMIN_ENABLED=true
+ADMIN_TOKEN=<strong-random-token>
+```
+
+当前白名单 action：
+
+```bash
+curl -fsS -H "X-Admin-Token: $ADMIN_TOKEN" \
+  https://blueskyxn-librefs-hfs.hf.space/_admin/api/status
+
+curl -fsS -H "X-Admin-Token: $ADMIN_TOKEN" \
+  https://blueskyxn-librefs-hfs.hf.space/_admin/api/actions
+
+curl -fsS -X POST -H "X-Admin-Token: $ADMIN_TOKEN" \
+  https://blueskyxn-librefs-hfs.hf.space/_admin/api/actions/run-health-checks
+
+curl -fsS -X POST -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"confirm": true}' \
+  https://blueskyxn-librefs-hfs.hf.space/_admin/api/actions/reload-nginx
+```
+
+当前版本不提供 Web terminal、file manager、任意 shell command、bucket/policy/root credential 管理或 `librefs` restart。admin action 会写入 `/data/logs/admin-audit.jsonl`。
 
 ## Console 静态资源检查
 
@@ -200,6 +265,8 @@ nginx: configuration file /etc/nginx/nginx.conf test is successful
 libreFS Object Storage Server
 API: https://blueskyxn-librefs-hfs.hf.space
 WebUI: https://blueskyxn-librefs-hfs.hf.space/console/
+librefs-hfs ops service listening on 127.0.0.1:8081
+librefs-hfs admin service listening on 127.0.0.1:8082
 ```
 
 ## 重启
@@ -214,12 +281,13 @@ hf spaces restart BlueSkyXN/libreFS-HFS
 
 ## 环境配置维护
 
-当前线上 Space 回读到的云端配置模型是：
+建议配置模型是：
 
 ```text
 HF Secrets:
 - MINIO_ROOT_USER
 - MINIO_ROOT_PASSWORD
+- OPS_TOKEN
 
 HF Variables:
 - empty
@@ -244,11 +312,11 @@ hf spaces secrets list BlueSkyXN/libreFS-HFS
 hf spaces volumes list BlueSkyXN/libreFS-HFS
 ```
 
-当前预期：
+启用 ops 后的推荐预期：
 
 ```text
 variables: No results found.
-secrets: MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
+secrets: MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, OPS_TOKEN
 volume: BlueSkyXN/libreFS-HFS-storage -> /data
 ```
 

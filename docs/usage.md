@@ -167,11 +167,15 @@ mc anonymous set-json public-read-policy.json librefs-hfs/public
 
 - `console`
 - `minio`
+- `_ops`
+- `_admin`
 
 原因：
 
 - `/console/` 是 Web Console 保留路径。
 - `/minio/...` 被健康检查和管理 API 使用。
+- `/_ops/` 是只读诊断入口。
+- `/_admin/` 是默认关闭的管理入口。
 
 推荐使用：
 

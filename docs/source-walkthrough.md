@@ -17,8 +17,10 @@
 | --- | --- | --- |
 | `README.md` | 是 | Hugging Face Space card metadata 和项目入口说明。 |
 | `Dockerfile` | 是 | 定义远端 build 和 runtime 镜像。 |
-| `start.sh` | 是 | 容器启动入口，负责设置 URL 环境变量、启动 libreFS 和 Nginx。 |
-| `nginx.conf` | 是 | 单端口反向代理配置，把 `/` 和 `/console/` 分发到不同内部端口。 |
+| `start.sh` | 是 | 容器启动入口，负责设置 URL 环境变量、启动 libreFS、ops-service、admin-service 和 Nginx。 |
+| `nginx.conf` | 是 | 单端口反向代理配置，把 `/_ops/`、`/_admin/`、`/console/` 和 `/` 分发到不同内部端口。 |
+| `ops_service.py` | 是 | 只读诊断服务。 |
+| `admin_service.py` | 是 | 默认关闭的管理服务。 |
 | `.dockerignore` | 是 | 控制 Docker build context，避免把本地临时文件送到远端 build。 |
 | `.gitattributes` | 是 | Hugging Face 仓库的 LFS 类型规则。 |
 | `.gitignore` | 否 | 本地 Git 忽略规则。 |
@@ -125,11 +127,13 @@ if ! getent passwd "${APP_UID}" >/dev/null; then useradd -m -u "${APP_UID}" -g "
 
 这样可以避免 HF base 环境里已经存在 UID `1000` 时触发 `useradd: UID 1000 is not unique`。
 
-runtime 只复制三个文件：
+runtime 只复制五个运行文件：
 
 | 来源 | 目标 | 权限 |
 | --- | --- | --- |
 | `/out/librefs` | `/usr/local/bin/librefs` | `0755` |
+| `ops_service.py` | `/usr/local/bin/librefs-ops-service.py` | `0644` |
+| `admin_service.py` | `/usr/local/bin/librefs-admin-service.py` | `0644` |
 | `nginx.conf` | `/etc/nginx/nginx.conf` | `0644` |
 | `start.sh` | `/start.sh` | `0755` |
 
@@ -172,6 +176,13 @@ https://blueskyxn-librefs-hfs.hf.space/minio/health/ready
 | `LIBREFS_API_ADDR` | `:9000` | S3 API 内部监听地址。 |
 | `LIBREFS_CONSOLE_ADDR` | `:9001` | Console 内部监听地址。 |
 | `NGINX_CONF` | `/etc/nginx/nginx.conf` | Nginx 配置路径。 |
+| `OPS_HOST` | `127.0.0.1` | ops-service bind host。 |
+| `OPS_PORT` | `8081` | ops-service port。 |
+| `OPS_TOKEN` | `librefs_ops_demo_token` | ops 诊断 token；公开长期运行建议覆盖。 |
+| `ADMIN_ENABLED` | `false` | admin-service 是否开启。 |
+| `ADMIN_HOST` | `127.0.0.1` | admin-service bind host。 |
+| `ADMIN_PORT` | `8082` | admin-service port。 |
+| `ADMIN_AUDIT_LOG` | `/data/logs/admin-audit.jsonl` | admin action 审计日志。 |
 
 外部只访问 `7860`，`9000` 和 `9001` 不直接暴露给 Hugging Face 外部网络。
 
@@ -195,20 +206,22 @@ https://blueskyxn-librefs-hfs.hf.space/minio/health/ready
 
 ### 进程模型
 
-脚本启动两个后台进程：
+脚本启动四个后台进程：
 
 ```bash
 librefs server "$DATA_DIR" \
   --address "$LIBREFS_API_ADDR" \
   --console-address "$LIBREFS_CONSOLE_ADDR" &
 
+python3 /usr/local/bin/librefs-ops-service.py &
+python3 /usr/local/bin/librefs-admin-service.py &
 nginx -c "$NGINX_CONF" -g "daemon off;" &
 ```
 
-随后循环监控两个 PID：
+随后循环监控四个 PID：
 
 - 任一进程退出，容器退出。
-- 收到 `INT` 或 `TERM`，同时关闭 libreFS 和 Nginx。
+- 收到 `INT` 或 `TERM`，同时关闭 libreFS、ops-service、admin-service 和 Nginx。
 - `tini` 作为 PID 1，负责更可靠地转发信号和回收进程。
 
 ## `nginx.conf`
@@ -221,12 +234,18 @@ nginx -c "$NGINX_CONF" -g "daemon off;" &
 | --- | --- |
 | libreFS S3 API | `127.0.0.1:9000` |
 | libreFS Console | `127.0.0.1:9001` |
+| ops-service | `127.0.0.1:8081` |
+| admin-service | `127.0.0.1:8082` |
 | Nginx | `0.0.0.0:7860` |
 
 外部路由：
 
 | 外部路径 | 内部目标 | 说明 |
 | --- | --- | --- |
+| `/_ops/` | `http://127.0.0.1:8081/` | 只读诊断入口。 |
+| `/_ops` | `308 /_ops/` | 规范化 ops URL。 |
+| `/_admin/` | `http://127.0.0.1:8082/` | 默认关闭的管理入口。 |
+| `/_admin` | `308 /_admin/` | 规范化 admin URL。 |
 | `/` | `http://127.0.0.1:9000` | S3 API 和公开对象直链。 |
 | `/console/` | `http://127.0.0.1:9001/` | Web Console。 |
 | `/console` | `308 /console/` | 规范化 Console URL。 |
@@ -338,10 +357,11 @@ Console 代理层还会隐藏 upstream `X-Frame-Options`，并添加 `Content-Se
 
 - `git diff --check`。
 - `start.sh` Bash 语法。
+- `ops_service.py` 和 `admin_service.py` Python 语法。
 - `README.md` front matter。
 - `Dockerfile` 的 Ubuntu build/runtime、upstream source build、`EXPOSE 7860` 和 healthcheck。
-- `start.sh` 的 Secret 校验、公开 URL 推导、Console redirect URL 和 Nginx 配置预检。
-- `nginx.conf` 的 `7860` 监听、`/console/` 子路径、S3 根路径和 iframe header。
+- `start.sh` 的 Secret 校验、公开 URL 推导、Console redirect URL、ops/admin service 和 Nginx 配置预检。
+- `nginx.conf` 的 `7860` 监听、`/_ops/`、`/_admin/`、`/console/` 子路径、S3 根路径和 iframe header。
 - `LICENSE` 是否仍是 AGPL-3.0。
 - 如果本机安装了 `nginx`，运行 `nginx -t -c "$PWD/nginx.conf"`。
 
