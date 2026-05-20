@@ -116,6 +116,7 @@ runtime stage 同样使用 `ubuntu:${UBUNTU_VERSION}`，只安装运行需要的
 - `ca-certificates`
 - `curl`
 - `nginx`
+- `python3`
 - `tini`
 
 UID/GID 处理逻辑是防御性的：
@@ -183,6 +184,8 @@ https://blueskyxn-librefs-hfs.hf.space/minio/health/ready
 | `ADMIN_HOST` | `127.0.0.1` | admin-service bind host。 |
 | `ADMIN_PORT` | `8082` | admin-service port。 |
 | `ADMIN_AUDIT_LOG` | `/data/logs/admin-audit.jsonl` | admin action 审计日志。 |
+| `ADMIN_FILES_ENABLED` | `false` | 预留状态字段；当前不提供 file manager。 |
+| `ADMIN_FILES_WRITE_ENABLED` | `false` | 预留状态字段；当前不提供 file manager 写入能力。 |
 | `CONTROL_PLANE_DEFAULT_LANG` | `en` | ops/admin JSON 文案默认语言；支持 `en`、`zh-CN`。 |
 
 外部只访问 `7860`，`9000` 和 `9001` 不直接暴露给 Hugging Face 外部网络。
@@ -349,6 +352,7 @@ Console 代理层还会隐藏 upstream `X-Frame-Options`，并添加 `Content-Se
 | `docs/troubleshooting.md` | 已遇到过的真实故障和判断方法。 |
 | `docs/source-walkthrough.md` | 仓库逐文件说明和修改边界。 |
 | `docs/development-plan.md` | 当前实现、未完成事项、优先级和下一步计划。 |
+| `docs/contract-alignment.md` | 代码与文档契约对照表，用于改动后逐项防漂移。 |
 
 ## `scripts/validate-contract.sh`
 
@@ -419,7 +423,16 @@ scripts/validate-contract.sh --remote
 - 覆盖 `MINIO_SERVER_URL` 时是否拒绝缺少 scheme 的值。
 - `MINIO_SERVER_URL` 是否没有多余尾部 `/`。
 - `MINIO_BROWSER_REDIRECT_URL` 是否以 `/console/` 结尾，并拒绝其他子路径。
-- libreFS 和 Nginx 任一退出时容器是否能退出。
+- libreFS、ops-service、admin-service 和 Nginx 任一退出时容器是否能退出。
+
+### 改 `ops_service.py` 或 `admin_service.py` 后必须验证
+
+- Python 语法：`python3 -m py_compile ops_service.py admin_service.py`。
+- `/_ops/config` 仍只返回 Secret 是否存在，不返回 Secret 原文。
+- `/_ops/` 仍然只有只读诊断能力。
+- `/_admin/` 仍然默认关闭；生产开启时必须带 `ADMIN_TOKEN`。
+- 写 action 仍只有白名单，并且 `reload-nginx` 需要 `confirm=true`。
+- `en` / `zh-CN` 文案选择不改变 `error`、action `name`、endpoint path 等机器字段。
 
 ### 改 `nginx.conf` 后必须验证
 

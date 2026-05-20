@@ -14,6 +14,7 @@
 | [运维与验收](operations.md) | 记录健康检查、ops/admin 入口、smoke test、runtime logs、rebuild 检查和运行风险。 |
 | [故障排查](troubleshooting.md) | 汇总本项目真实遇到过的 build/runtime/Console/S3 问题。 |
 | [开发状态与下一步计划](development-plan.md) | 汇总当前实现、未完成事项、优先级和近期开发计划。 |
+| [代码-文档契约对照](contract-alignment.md) | 按当前代码和生产回读状态列出关键事实源，减少文档漂移。 |
 
 ## 当前线上实例
 
@@ -36,7 +37,7 @@ https://blueskyxn-librefs-hfs.hf.space/console/
 - 从 Ubuntu + libreFS 源码编译，不使用官方 Docker image。
 - `cpu-basic` runtime 可启动。
 - Nginx 在 `7860` 上合并 S3 API 和 Web Console。
-- `/_ops/` 提供只读诊断入口；`/_admin/` 是默认关闭的管理入口。
+- `/_ops/` 提供只读诊断入口；`/_admin/` 代码默认关闭，但当前生产环境已通过 `ADMIN_ENABLED=true` 显式开启。
 - Web Console 可在 `/console/` 正常渲染。
 - Web Console 登录、S3 SigV4 写入、公开直链和持久化读回需要 root 凭证或测试对象，不能只靠 health check 证明。
 

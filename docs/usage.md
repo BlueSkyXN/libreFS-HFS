@@ -187,6 +187,24 @@ uploads
 artifacts
 ```
 
+## Ops/Admin 入口
+
+`/_ops/` 是给维护者使用的只读诊断入口，不是对象访问路径。它需要 `OPS_TOKEN`：
+
+```bash
+curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
+  "https://blueskyxn-librefs-hfs.hf.space/_ops/health?lang=zh-CN"
+```
+
+`/_admin/` 是受控管理入口，代码默认关闭。当前生产环境已设置 `ADMIN_ENABLED=true`，因此需要 `ADMIN_TOKEN` 才能访问：
+
+```bash
+curl -fsS -H "X-Admin-Token: $ADMIN_TOKEN" \
+  "https://blueskyxn-librefs-hfs.hf.space/_admin/api/actions?lang=zh-CN"
+```
+
+当前 admin 只提供 `run-health-checks` 和 `reload-nginx` 两个白名单 action；没有 Web terminal、file manager、bucket policy 管理或 root credential 管理。
+
 ## 数据持久性
 
 当前 `hf spaces volumes list` 显示已经把 Hugging Face Storage Bucket 挂载到 `/data`。如果后续移除挂载，上传文件应视为临时数据。

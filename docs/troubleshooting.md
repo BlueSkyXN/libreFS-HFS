@@ -178,6 +178,45 @@ GET /console/api/v1/session 403
 
 登录后该 endpoint 应返回 `200`。
 
+## `/_admin/` 返回 `404 admin_disabled`
+
+### 判断
+
+这是代码默认行为，表示 `ADMIN_ENABLED` 没有设置为 `true`。如果你期望生产环境已开启 admin，说明 HF Variable 可能漂移或重启后未生效。
+
+### 处理
+
+回读当前 Variables：
+
+```bash
+hf spaces variables list BlueSkyXN/libreFS-HFS
+```
+
+需要开启时设置：
+
+```bash
+hf spaces variables add BlueSkyXN/libreFS-HFS -e ADMIN_ENABLED=true
+```
+
+当前生产环境最近回读是 `ADMIN_ENABLED=true`，因此线上无 token 访问 admin API 的预期不是 `404`，而是 `401 unauthorized`。
+
+## `/_admin/` 返回 `401 unauthorized`
+
+### 判断
+
+admin 已开启，但请求没有带有效 `ADMIN_TOKEN`。这是当前生产环境无 token 访问 admin API 的预期行为。
+
+### 处理
+
+使用独立 admin header 或 bearer token：
+
+```bash
+curl -fsS -H "X-Admin-Token: $ADMIN_TOKEN" \
+  https://blueskyxn-librefs-hfs.hf.space/_admin/api/status
+```
+
+HF CLI 只能列出 Secret key，不能回显 Secret value；要确认 value 是否同步，需要用本地 `.env.local` 里的 token 调线上接口验证。
+
 ## 根路径 `/` 返回 `400 application/xml`
 
 ### 现象

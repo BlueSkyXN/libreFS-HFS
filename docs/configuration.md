@@ -43,13 +43,13 @@ fatal: couldn't find remote ref main
 | `MINIO_ROOT_USER` | 是 | `start.sh`、libreFS | S3 root access key 和 Console 用户名。 |
 | `MINIO_ROOT_PASSWORD` | 是 | `start.sh`、libreFS | S3 root secret key 和 Console 密码。 |
 | `OPS_TOKEN` | 建议 | ops-service | `/_ops/` 只读诊断入口 token；默认 demo 值只适合快速测试。 |
-| `ADMIN_TOKEN` | 开启 admin 时 | admin-service | `/_admin/` 独立 token；`ADMIN_ENABLED=true` 时必须设置。 |
+| `ADMIN_TOKEN` | 开启 admin 时 | admin-service | `/_admin/` 独立 Secret/header；`ADMIN_ENABLED=true` 时必须设置。 |
 
-`start.sh` 会在缺少任一 Secret 时直接退出。这是有意设计，用来让错误配置尽早暴露。
+`start.sh` 只会在缺少必需 root Secrets（`MINIO_ROOT_USER` 或 `MINIO_ROOT_PASSWORD`）时直接退出。这是有意设计，用来让错误配置尽早暴露。`OPS_TOKEN` 有代码默认值；`ADMIN_TOKEN` 只有在 `ADMIN_ENABLED=true` 后才成为必需项。
 
 ## Hugging Face Variables
 
-原则：不要把和代码默认值、upstream 默认值相同的配置同步到 Hugging Face Variables。Variables 只用于表达“这个 Space 明确要覆盖默认行为”。当前默认部署下，HF Variables 可以为空。
+原则：不要把和代码默认值、upstream 默认值相同的配置同步到 Hugging Face Variables。Variables 只用于表达“这个 Space 明确要覆盖默认行为”。代码默认部署下，HF Variables 可以为空；当前生产环境为了开启 admin，已显式设置 `ADMIN_ENABLED=true`。
 
 | Variable | 必需 | 默认值 | 什么时候设置 |
 | --- | --- | --- | --- |
@@ -68,7 +68,7 @@ Hugging Face runtime 会提供 `SPACE_HOST`。当前 Space 的公开 host 是：
 blueskyxn-librefs-hfs.hf.space
 ```
 
-当前线上 Space 的推荐最小状态：
+代码默认部署的推荐最小状态：
 
 ```text
 HF Secrets:
@@ -78,6 +78,22 @@ HF Secrets:
 
 HF Variables:
 - empty
+
+HF Volume:
+- BlueSkyXN/libreFS-HFS-storage -> /data
+```
+
+当前生产环境最近回读状态（2026-05-20）：
+
+```text
+HF Secrets:
+- MINIO_ROOT_USER
+- MINIO_ROOT_PASSWORD
+- OPS_TOKEN
+- ADMIN_TOKEN
+
+HF Variables:
+- ADMIN_ENABLED=true
 
 HF Volume:
 - BlueSkyXN/libreFS-HFS-storage -> /data
@@ -120,6 +136,8 @@ HF Volume:
 | `ADMIN_HOST` | `127.0.0.1` | admin-service bind host；不要和 Nginx 静态路由不一致。 |
 | `ADMIN_PORT` | `8082` | admin-service port；不要和 Nginx 静态路由不一致。 |
 | `ADMIN_AUDIT_LOG` | `/data/logs/admin-audit.jsonl` | admin action 审计日志。 |
+| `ADMIN_FILES_ENABLED` | `false` | 预留状态字段；当前没有 file manager，设置它不会启用文件管理功能。 |
+| `ADMIN_FILES_WRITE_ENABLED` | `false` | 预留状态字段；当前没有 file manager 写入能力，设置它不会启用文件写入功能。 |
 | `CONTROL_PLANE_DEFAULT_LANG` | `en` | ops/admin JSON 文案默认语言；支持 `en`、`zh-CN`。 |
 | `MINIO_SERVER_URL` | 从公开根 URL 推导 | 公开 S3 endpoint。 |
 | `MINIO_BROWSER_REDIRECT_URL` | `${MINIO_SERVER_URL}/console/` | 公开 Console URL。 |
@@ -223,7 +241,7 @@ ADMIN_ENABLED=false
 ADMIN_TOKEN=
 ```
 
-开启时必须设置独立 `ADMIN_TOKEN`。当前白名单 action 只有：
+开启时必须设置 `ADMIN_TOKEN`，并通过 `X-Admin-Token` 或 `Authorization: Bearer <token>` 认证。`ADMIN_TOKEN` 是独立配置键和请求头；它的值是否与 `OPS_TOKEN` 相同取决于当前运维策略，代码不强制两者不同。当前白名单 action 只有：
 
 - `POST /_admin/api/actions/run-health-checks`
 - `POST /_admin/api/actions/reload-nginx`
