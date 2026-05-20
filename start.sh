@@ -8,6 +8,25 @@ DATA_DIR="${DATA_DIR:-/data}"
 LIBREFS_API_ADDR="${LIBREFS_API_ADDR:-:9000}"
 LIBREFS_CONSOLE_ADDR="${LIBREFS_CONSOLE_ADDR:-:9001}"
 NGINX_CONF="${NGINX_CONF:-/etc/nginx/nginx.conf}"
+OPS_HOST="${OPS_HOST:-127.0.0.1}"
+OPS_PORT="${OPS_PORT:-8081}"
+OPS_TOKEN="${OPS_TOKEN:-librefs_ops_demo_token}"
+ADMIN_ENABLED="${ADMIN_ENABLED:-false}"
+ADMIN_HOST="${ADMIN_HOST:-127.0.0.1}"
+ADMIN_PORT="${ADMIN_PORT:-8082}"
+ADMIN_AUDIT_LOG="${ADMIN_AUDIT_LOG:-${DATA_DIR%/}/logs/admin-audit.jsonl}"
+
+export DATA_DIR
+export LIBREFS_API_ADDR
+export LIBREFS_CONSOLE_ADDR
+export NGINX_CONF
+export OPS_HOST
+export OPS_PORT
+export OPS_TOKEN
+export ADMIN_ENABLED
+export ADMIN_HOST
+export ADMIN_PORT
+export ADMIN_AUDIT_LOG
 
 if [[ -n "${PUBLIC_BASE_URL:-}" ]]; then
   public_base="${PUBLIC_BASE_URL%/}"
@@ -38,6 +57,7 @@ fi
 
 mkdir -p \
   "$DATA_DIR" \
+  "${DATA_DIR%/}/logs" \
   /tmp/nginx/client_body \
   /tmp/nginx/proxy \
   /tmp/nginx/fastcgi \
@@ -51,13 +71,19 @@ librefs server "$DATA_DIR" \
   --console-address "$LIBREFS_CONSOLE_ADDR" &
 LIBREFS_PID=$!
 
+python3 /usr/local/bin/librefs-ops-service.py &
+OPS_PID=$!
+
+python3 /usr/local/bin/librefs-admin-service.py &
+ADMIN_PID=$!
+
 nginx -c "$NGINX_CONF" -g "daemon off;" &
 NGINX_PID=$!
 
 shutdown() {
   trap - INT TERM
-  kill "$LIBREFS_PID" "$NGINX_PID" 2>/dev/null || true
-  wait "$LIBREFS_PID" "$NGINX_PID" 2>/dev/null || true
+  kill "$LIBREFS_PID" "$OPS_PID" "$ADMIN_PID" "$NGINX_PID" 2>/dev/null || true
+  wait "$LIBREFS_PID" "$OPS_PID" "$ADMIN_PID" "$NGINX_PID" 2>/dev/null || true
 }
 
 terminate() {
@@ -65,39 +91,45 @@ terminate() {
   exit 0
 }
 
-wait_for_exit() {
-  local name="$1"
-  local pid="$2"
-  local rc=0
-
-  if wait "$pid"; then
-    rc=0
-  else
-    rc=$?
-  fi
-
-  if [[ "$rc" -eq 0 ]]; then
-    echo "$name exited unexpectedly with status 0" >&2
-    status=1
-  else
-    echo "$name exited with status $rc" >&2
-    status="$rc"
-  fi
-}
-
 trap terminate INT TERM
 
-status=0
-while true; do
-  if ! kill -0 "$LIBREFS_PID" 2>/dev/null; then
-    wait_for_exit "librefs" "$LIBREFS_PID"
-    break
+process_active() {
+  local pid="$1"
+  local proc_pid proc_name proc_state rest
+
+  if [[ -r "/proc/$pid/stat" ]]; then
+    read -r proc_pid proc_name proc_state rest <"/proc/$pid/stat" || return 1
+    [[ "$proc_state" != "Z" ]]
+    return
   fi
 
-  if ! kill -0 "$NGINX_PID" 2>/dev/null; then
-    wait_for_exit "nginx" "$NGINX_PID"
-    break
-  fi
+  kill -0 "$pid" 2>/dev/null
+}
+
+status=0
+processes=(
+  "librefs:$LIBREFS_PID"
+  "ops-service:$OPS_PID"
+  "admin-service:$ADMIN_PID"
+  "nginx:$NGINX_PID"
+)
+
+while true; do
+  for process in "${processes[@]}"; do
+    name="${process%%:*}"
+    pid="${process#*:}"
+
+    if ! process_active "$pid"; then
+      if wait "$pid"; then
+        status=1
+        echo "$name exited unexpectedly with status 0" >&2
+      else
+        status=$?
+        echo "$name exited with status $status" >&2
+      fi
+      break 2
+    fi
+  done
 
   sleep 1
 done

@@ -4,7 +4,7 @@
 
 本仓库是 LibreFS HFS 的 Hugging Face Docker Space 部署包装层。仓库不 vendored libreFS 源码；远端 Docker build 从 `https://github.com/libreFS/libreFS.git` 拉源码并编译 `librefs`，runtime 用 Nginx 在公开端口 `7860` 合并 S3 API 和 Web Console。
 
-核心契约：Ubuntu builder/runtime、远端源码构建、不使用 libreFS 官方 Docker image、外部只暴露 `7860`、S3 API 在 `/`、Web Console 在 `/console/`。
+核心契约：Ubuntu builder/runtime、远端源码构建、不使用 libreFS 官方 Docker image、外部只暴露 `7860`、S3 API 在 `/`、Web Console 在 `/console/`、只读诊断面在 `/_ops/`、默认关闭的管理面在 `/_admin/`。
 
 ## Codex startup behavior
 
@@ -19,9 +19,11 @@
 | --- | --- | ---: | --- |
 | `README.md` | HF Space metadata、项目入口、endpoint、Secrets、能力状态 | No | 修改 front matter、公开地址、状态表、health check、文档索引时 |
 | `LICENSE` | 仓库许可证文本，应对齐 libreFS 上游 AGPL-3.0 | No | 修改 license metadata、合规说明或合并许可证文件时 |
-| `Dockerfile` | 远端 build/runtime 镜像契约、Go 下载、源码编译、runtime packages、healthcheck | No | 修改 base image、build args、上游源码 ref、UID/GID、runtime packages、`HEALTHCHECK` 时 |
-| `start.sh` | 容器启动入口；校验 Secrets、推导公开 URL、启动并监控 libreFS/Nginx | No | 修改环境变量、端口、URL 推导、进程管理、signal handling 时 |
-| `nginx.conf` | 单端口反向代理；`/` -> S3 API，`/console/` -> Web Console | No | 修改路由、proxy header、buffering、timeout、body size、Console 子路径、iframe/CSP header 时 |
+| `Dockerfile` | 远端 build/runtime 镜像契约、Go 下载、源码编译、runtime packages、Python ops/admin 服务复制、healthcheck | No | 修改 base image、build args、上游源码 ref、UID/GID、runtime packages、`HEALTHCHECK` 时 |
+| `start.sh` | 容器启动入口；校验 Secrets、推导公开 URL、启动并监控 libreFS、ops-service、admin-service、Nginx | No | 修改环境变量、端口、URL 推导、进程管理、signal handling 时 |
+| `nginx.conf` | 单端口反向代理；`/_ops/` -> ops-service，`/_admin/` -> admin-service，`/console/` -> Web Console，`/` -> S3 API | No | 修改路由、proxy header、buffering、timeout、body size、Console 子路径、iframe/CSP header 时 |
+| `ops_service.py` | 只读诊断 HTTP 服务；health、system、config、version、metrics | No | 修改 `/_ops` endpoint、鉴权、配置摘要、metrics、健康检查时 |
+| `admin_service.py` | 默认关闭的管理 HTTP 服务；status、action catalog、run-health-checks、reload-nginx | No | 修改 `/_admin` endpoint、写 action、审计、token 校验时 |
 | `.dockerignore` | Docker build context 过滤，避免 `.env*`、`local/`、临时文件进入 Hugging Face build | No | 修改 build context 或本地材料忽略规则时 |
 | `.gitattributes` | Hugging Face 仓库展示/LFS 类型规则 | No | 修改 HF 文件类型或大文件规则时 |
 | `.gitignore` | 本地 Git 忽略规则 | No | 修改 `.data/`、`.env*`、`/local`、logs、临时文件忽略规则时 |
@@ -64,7 +66,7 @@ Rules:
 | `git status --short --branch` | 查看当前分支和未提交改动 | local repo | 只读；默认可运行 |
 | `git remote -v` | 确认 `hf` / `origin` 远端职责 | local repo | 只读；默认可运行 |
 | `git diff --check` | 检查 whitespace/error marker | local repo | 只读；默认可运行 |
-| `scripts/validate-contract.sh` | 汇总检查 front matter、Dockerfile、start.sh、nginx.conf、license 和本机 Nginx 语法 | local repo | 只读；不安装依赖、不本地编译 libreFS |
+| `scripts/validate-contract.sh` | 汇总检查 front matter、Dockerfile、start.sh、Python ops/admin 服务、nginx.conf、license 和本机 Nginx 语法 | local repo | 只读；不安装依赖、不本地编译 libreFS |
 | `scripts/validate-contract.sh --remote` | 在本地契约检查基础上额外检查公开 health endpoint | local + remote Space | 需要网络；不读取 Secret、不修改 Space |
 | `MINIO_ROOT_USER=... MINIO_ROOT_PASSWORD=... scripts/smoke-s3-curl.sh` | 使用 `curl --aws-sigv4` 执行临时 bucket/object 的 S3 smoke test | remote Space | 会修改线上临时 bucket/object；只在用户明确要求凭证型验收时运行 |
 | `mkdir -p /tmp/nginx/client_body /tmp/nginx/proxy /tmp/nginx/fastcgi /tmp/nginx/uwsgi /tmp/nginx/scgi && nginx -t -c "$PWD/nginx.conf"` | 本地校验 Nginx 配置语法 | `nginx.conf` | 需要本机安装 `nginx`；不启动服务 |
@@ -75,6 +77,8 @@ Rules:
 | `curl -fsSI https://blueskyxn-librefs-hfs.hf.space/console/static/js/main.45669c2e.js` | 检查 Console JS MIME | remote Space | 需要网络；asset 文件名可能随上游变化 |
 | `curl -fsSI https://blueskyxn-librefs-hfs.hf.space/console/static/css/main.e60e4760.css` | 检查 Console CSS MIME | remote Space | 需要网络；asset 文件名可能随上游变化 |
 | `curl -fsSI https://blueskyxn-librefs-hfs.hf.space/console/ \| tr -d '\r' \| grep -Ei '^(x-frame-options\|content-security-policy):'` | 检查 Console iframe header | remote Space | 需要网络；修复后不应暴露 `x-frame-options`，CSP 应包含 `frame-ancestors` |
+| `OPS_TOKEN=... curl -H "X-Ops-Token: $OPS_TOKEN" https://blueskyxn-librefs-hfs.hf.space/_ops/health` | 检查只读 ops health | remote Space | 需要网络和有效 `OPS_TOKEN`；不修改 Space |
+| `ADMIN_ENABLED=true ADMIN_TOKEN=... curl -H "X-Admin-Token: $ADMIN_TOKEN" https://blueskyxn-librefs-hfs.hf.space/_admin/api/status` | 检查已显式开启的 admin status | remote Space | admin 默认关闭；只在用户明确开启后检查 |
 | `hf spaces logs BlueSkyXN/libreFS-HFS --build --tail 200` / `hf spaces logs BlueSkyXN/libreFS-HFS --tail 200` | 查看 build/runtime logs | remote Space | 需要 Hugging Face CLI、网络、可能需要登录状态 |
 | `hf spaces variables list BlueSkyXN/libreFS-HFS` / `hf spaces secrets list BlueSkyXN/libreFS-HFS` / `hf spaces volumes list BlueSkyXN/libreFS-HFS` | 只读回查云端 Variables、Secret 名称和 Storage Bucket 挂载 | remote Space | 需要 Hugging Face CLI、网络、可能需要登录状态；Secrets 只显示 key 不显示 value |
 
@@ -95,7 +99,10 @@ Rules:
 - `/data` 是对象数据目录；没有挂载 Hugging Face Storage Bucket 时数据不保证持久。
 - Hugging Face Space 外部只暴露 `7860`。`9000` 和 `9001` 是容器内部端口，不要在文档或配置里描述成外部直连端口。
 - S3 client 应使用 path-style addressing；HF Space 子域名下不要推荐 virtual-hosted bucket URL。
-- 避免建议或创建名为 `console`、`minio` 的公开 bucket，因为这些路径与 Console 和健康检查路由冲突。
+- 避免建议或创建名为 `console`、`minio`、`_ops`、`_admin` 的公开 bucket，因为这些路径与 Console、健康检查、ops 和 admin 路由冲突。
+- `/_ops/` 是只读诊断面，默认使用 `OPS_TOKEN` 保护；不能新增写操作、任意命令、任意文件读取、SQL、restart 或 secret 原文返回。
+- `/_admin/` 是独立管理面，默认 `ADMIN_ENABLED=false`；不能复用 `OPS_TOKEN`，开启时必须设置独立 `ADMIN_TOKEN`。写 action 只能走白名单、显式 `confirm=true` 和审计日志。
+- 当前 admin 第一版只允许 `run-health-checks` 和 `reload-nginx`；不要新增 Web terminal、file manager、bucket/policy/root credential 管理或 `librefs` restart，除非用户明确要求并重新评估生命周期。
 - 对外说明要保守：适合测试、临时共享和轻量使用，不建议作为生产对象存储。
 
 ## File-specific rules
@@ -120,7 +127,8 @@ Rules:
 - Go 通过 `GO_VERSION` 下载官方 tarball；修改时同步 `README.md` 和 `docs/configuration.md`。
 - `TARGETARCH` 当前只接受 `amd64|arm64`；扩展前确认 Go tarball 名称和 HF buildx 行为。
 - 保留 `go build -trimpath -buildvcs=false -ldflags="-s -w"` 和 BuildKit cache mount。
-- Runtime 只安装必需包：`bash`、`ca-certificates`、`curl`、`nginx`、`tini`。
+- Runtime 只安装必需包：`bash`、`ca-certificates`、`curl`、`nginx`、`python3`、`tini`。
+- Runtime 必须复制 `ops_service.py` 和 `admin_service.py` 到 `/usr/local/bin/`；服务通过 `start.sh` 用 `python3` 启动。
 - `HEALTHCHECK` 应继续访问 `http://127.0.0.1:7860/minio/health/ready`。
 
 ### `start.sh`
@@ -132,10 +140,15 @@ Rules:
 - 如果用户覆盖 `MINIO_SERVER_URL`，必须包含 `http://` 或 `https://` scheme；如果覆盖 `MINIO_BROWSER_REDIRECT_URL`，仍必须落在 `/console/` 子路径。
 - 执行 `nginx -t -c "$NGINX_CONF"` 前必须创建 `/tmp/nginx/*` 临时目录。
 - libreFS 和 Nginx 必须都被监控；任一进程退出时容器应退出并清理另一个进程。修改 signal handling 后检查 `tini`、`INT`、`TERM`。
+- ops-service 和 admin-service 也必须被监控；任一进程退出时容器应退出并清理其余进程。
+- `OPS_TOKEN` 默认值只适合 demo/lightweight diagnostics，公开长期运行建议在 HF Secret 中覆盖。
+- `ADMIN_ENABLED` 默认必须是 `false`；`ADMIN_AUDIT_LOG` 默认落在 `/data/logs/admin-audit.jsonl`。
 
 ### `nginx.conf`
 
 - 保留 `listen 7860`，除非同时修改 HF `app_port`、Dockerfile `EXPOSE` 和文档。
+- `location = /_ops` 和 `location /_ops/` 必须在 `location /` 前，转发到 `http://127.0.0.1:8081/`。
+- `location = /_admin` 和 `location /_admin/` 必须在 `location /` 前，转发到 `http://127.0.0.1:8082/`。
 - `location = /console` 继续重定向到 `/console/`。
 - `location /console/` 的 `proxy_pass` 必须是 `http://127.0.0.1:9001/;`，末尾 `/` 用来剥掉 `/console/` 前缀。
 - `location /` 继续转发到 `http://127.0.0.1:9000`，这是 S3 API 根路径。
@@ -158,6 +171,9 @@ Rules:
 - 不要把 `LIBREFS_REF` 改成 `main` 来“修复”构建，除非先确认上游确实切换默认分支。
 - 不要移除 `/console/` 子路径或把 Console 改到根路径；根路径属于 S3 API。
 - 不要把 `/minio/health/ready` 当成业务页面；它是 health endpoint。
+- 不要把 `/_ops/` 写成管理面；它只能做只读诊断。
+- 不要默认开启 `/_admin/`；不要把 `ADMIN_TOKEN` 写入仓库。
+- 不要新增 `/_admin/terminal/`、file manager、任意 shell command 或 `librefs` restart，除非用户明确要求并接受风险。
 - 不要把未签名浏览器访问 `/` 返回 S3 XML error 解释成故障；签名 S3 请求和公开 policy 对象 URL 才是预期访问方式。
 - 不要承诺 `/data` 持久化，除非已经挂载 HF Storage Bucket 并完成重启与 rebuild 后读取验证。
 - 不要新增 package manager、Node/Python/Rust 项目骨架或 CI 配置来“补测试”，除非用户明确要求。
@@ -196,21 +212,30 @@ Rules:
 ### `Dockerfile` changes
 
 1. 只读检查 diff，确认仍是 Ubuntu builder/runtime 和源码构建路径。
-2. 推送后查看 HF build logs。
-3. Space 进入 `RUNNING` 后检查 `/minio/health/ready` 和 Console 静态资源。
-4. 需要完整功能验收时，执行签名 S3 smoke test。
+2. 确认 runtime 仍只新增必要 `python3` 来运行 ops/admin 标准库服务。
+3. 推送后查看 HF build logs。
+4. Space 进入 `RUNNING` 后检查 `/minio/health/ready`、Console 静态资源和 `/_ops/health`。
+5. 需要完整功能验收时，执行签名 S3 smoke test。
 
 ### `start.sh` changes
 
 1. 确认缺少 root Secret 时会明确失败。
 2. 确认公开 URL 推导、`MINIO_SERVER_URL` 去尾 `/`、覆盖值包含 `http://` 或 `https://` scheme、`MINIO_BROWSER_REDIRECT_URL` 以 `/console/` 结尾。
-3. 推送后检查 runtime logs，确认 Nginx config test、API URL 和 WebUI URL 正确。
+3. 确认 `librefs`、ops-service、admin-service、Nginx 任一退出都会导致容器退出并清理其余进程。
+4. 推送后检查 runtime logs，确认 Nginx config test、API URL 和 WebUI URL 正确。
 
 ### `nginx.conf` changes
 
 1. 运行 `nginx -t -c "$PWD/nginx.conf"` 或等价容器内检查。
-2. 检查 `/console` -> `/console/`、Console JS/CSS MIME、Console iframe header、`/minio/health/ready`。
+2. 检查 `/_ops` -> `/_ops/`、`/_admin` -> `/_admin/`、`/console` -> `/console/`、Console JS/CSS MIME、Console iframe header、`/minio/health/ready`。
 3. 如涉及上传路径、buffering 或 timeout，补充大文件上传/下载 smoke test。
+
+### `ops_service.py` / `admin_service.py` changes
+
+1. 运行 `python3 -m py_compile ops_service.py admin_service.py`。
+2. 确认 `/_ops/config` 只返回 secret presence，不返回 secret value。
+3. 确认 `ADMIN_ENABLED=false` 时 `/_admin/` 返回 404。
+4. 确认 admin 写 action 需要独立 `ADMIN_TOKEN` 和 `confirm=true`，并写入 audit log。
 
 ## Notes for future agents
 

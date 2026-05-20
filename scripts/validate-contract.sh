@@ -64,6 +64,8 @@ check "shell script syntax" bash -n start.sh
 bash -n scripts/smoke-s3-curl.sh
 test -x scripts/smoke-s3-curl.sh
 
+check "Python service syntax" python3 -m py_compile ops_service.py admin_service.py
+
 check "README front matter" require_pattern README.md '^sdk: docker$' 'README.md must keep sdk: docker'
 require_pattern README.md '^app_port: 7860$' 'README.md must keep app_port: 7860'
 require_pattern README.md '^license: agpl-3.0$' 'README.md must keep license: agpl-3.0'
@@ -71,6 +73,9 @@ require_pattern README.md '^license: agpl-3.0$' 'README.md must keep license: ag
 check "Dockerfile contract" require_pattern Dockerfile '^FROM ubuntu:\$\{UBUNTU_VERSION\} AS builder$' 'builder must stay on Ubuntu'
 require_pattern Dockerfile '^FROM ubuntu:\$\{UBUNTU_VERSION\}$' 'runtime must stay on Ubuntu'
 require_pattern Dockerfile 'git remote add origin https://github\.com/libreFS/libreFS\.git' 'build must fetch libreFS upstream source'
+require_pattern Dockerfile 'python3' 'runtime must include Python for ops/admin services'
+require_pattern Dockerfile 'librefs-ops-service\.py' 'runtime must copy ops service'
+require_pattern Dockerfile 'librefs-admin-service\.py' 'runtime must copy admin service'
 require_pattern Dockerfile '^EXPOSE 7860$' 'container must expose only the HF app port'
 require_pattern Dockerfile 'http://127\.0\.0\.1:7860/minio/health/ready' 'healthcheck must use the public Nginx port'
 
@@ -82,16 +87,28 @@ require_pattern start.sh 'MINIO_BROWSER_REDIRECT_URL.*console/' 'Console redirec
 require_pattern start.sh 'MINIO_BROWSER_REDIRECT_URL must end with /console/' 'Console redirect override must be validated'
 require_pattern start.sh 'MINIO_SERVER_URL must start with http:// or https://' 'S3 public URL must include a scheme'
 require_pattern start.sh 'nginx -t -c "\$NGINX_CONF"' 'start.sh must validate Nginx config before starting'
+require_pattern start.sh 'librefs-ops-service\.py' 'start.sh must start ops service'
+require_pattern start.sh 'librefs-admin-service\.py' 'start.sh must start admin service'
+require_pattern start.sh 'ADMIN_ENABLED.*false' 'admin surface must default to disabled'
 
 check "S3 smoke script contract" require_pattern scripts/smoke-s3-curl.sh '--aws-sigv4' 'S3 smoke test must use curl SigV4 support'
 require_pattern scripts/smoke-s3-curl.sh 'Refusing to use bucket' 'S3 smoke test must refuse existing buckets'
 
 check "nginx routing contract" require_pattern nginx.conf 'listen 7860;' 'Nginx must listen on HF app port 7860'
 require_pattern nginx.conf 'location = /console' 'Nginx must normalize /console'
+require_pattern nginx.conf 'location = /_ops' 'Nginx must normalize /_ops'
+require_pattern nginx.conf 'proxy_pass http://127\.0\.0\.1:8081/;' 'Nginx must proxy ops service'
+require_pattern nginx.conf 'location = /_admin' 'Nginx must normalize /_admin'
+require_pattern nginx.conf 'proxy_pass http://127\.0\.0\.1:8082/;' 'Nginx must proxy admin service'
 require_pattern nginx.conf 'proxy_pass http://127\.0\.0\.1:9001/;' 'Console proxy_pass must strip /console/ prefix'
 require_pattern nginx.conf 'proxy_pass http://127\.0\.0\.1:9000;' 'S3 API must stay at the root path'
 require_pattern nginx.conf 'proxy_hide_header X-Frame-Options;' 'Console proxy must hide upstream X-Frame-Options'
 require_pattern nginx.conf 'frame-ancestors.*huggingface\.co' 'Console CSP must allow Hugging Face iframe embedding'
+
+check "ops/admin service contract" require_pattern ops_service.py 'SECRET_KEYS' 'ops service must summarize secret presence only'
+require_pattern ops_service.py 'secret values are intentionally omitted' 'ops config must not return raw secrets'
+require_pattern admin_service.py 'ADMIN_ENABLED.*false' 'admin service must default to disabled'
+require_pattern admin_service.py 'confirm=true is required' 'admin write action must require explicit confirm'
 
 if grep -Eq 'listen +(9000|9001);' nginx.conf; then
   echo "Contract check failed: nginx.conf must not expose internal ports 9000/9001" >&2

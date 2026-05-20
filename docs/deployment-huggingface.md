@@ -23,6 +23,8 @@ app_port: 7860
 | --- | --- | --- |
 | `MINIO_ROOT_USER` | `admin` | 是 |
 | `MINIO_ROOT_PASSWORD` | 强随机密码 | 是 |
+| `OPS_TOKEN` | 强随机值 | 建议 |
+| `ADMIN_TOKEN` | 强随机值 | 仅开启 admin 时 |
 
 不要把真实凭证提交进仓库。Public Space 的源码文件是公开可见的。
 
@@ -31,7 +33,8 @@ app_port: 7860
 ```bash
 hf spaces secrets add BlueSkyXN/libreFS-HFS \
   -s MINIO_ROOT_USER=admin \
-  -s MINIO_ROOT_PASSWORD='<strong-password>'
+  -s MINIO_ROOT_PASSWORD='<strong-password>' \
+  -s OPS_TOKEN='<strong-ops-token>'
 ```
 
 查看已配置的 Secret 名称：
@@ -52,6 +55,7 @@ hf spaces secrets list BlueSkyXN/libreFS-HFS
 | `LIBREFS_REF` | `master` | 临时切换上游 tag、branch 时设置。 |
 | `LIBREFS_COMMIT` | `HEAD` | 想让 Docker build 校验精确 commit 时设置；长期 pin 更适合写进 `Dockerfile`。 |
 | `GO_VERSION` | `1.26.3` | 上游 libreFS 要求不同 Go 版本时再改。 |
+| `ADMIN_ENABLED` | `false` | 只有明确需要开启 `/_admin/` 时设置为 `true`。 |
 
 Docker Space 会把 Variables 传给 Docker build 作为 build args，也会在 runtime 注入为环境变量。
 
@@ -74,6 +78,8 @@ hf spaces variables list BlueSkyXN/libreFS-HFS
 ```text
 No results found.
 ```
+
+如果临时开启 admin，Variables 会出现 `ADMIN_ENABLED=true`；排障结束后建议关闭或移除。
 
 本地可以维护 `.env.local` 记录真实 secret 值、当前 host、Storage Bucket、默认值说明和临时覆盖候选。`.env.local` 必须被 Git ignore，不应提交。
 

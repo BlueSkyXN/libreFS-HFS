@@ -55,11 +55,19 @@ RUN apt-get update \
         ca-certificates \
         curl \
         nginx \
+        python3 \
         tini \
     && rm -rf /var/lib/apt/lists/*
 
 ARG APP_UID=1000
 ARG APP_GID=1000
+ARG GO_VERSION=1.26.3
+ARG LIBREFS_REF=master
+ARG LIBREFS_COMMIT=HEAD
+
+ENV GO_VERSION=${GO_VERSION}
+ENV LIBREFS_REF=${LIBREFS_REF}
+ENV LIBREFS_COMMIT=${LIBREFS_COMMIT}
 
 RUN set -eux; \
     if ! getent group "${APP_GID}" >/dev/null; then \
@@ -78,6 +86,8 @@ RUN set -eux; \
     chown -R "${APP_UID}:${APP_GID}" /data /tmp/nginx
 
 COPY --from=builder --chmod=0755 /out/librefs /usr/local/bin/librefs
+COPY --chmod=0644 ops_service.py /usr/local/bin/librefs-ops-service.py
+COPY --chmod=0644 admin_service.py /usr/local/bin/librefs-admin-service.py
 COPY --chmod=0644 nginx.conf /etc/nginx/nginx.conf
 COPY --chmod=0755 start.sh /start.sh
 

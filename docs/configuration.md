@@ -42,6 +42,8 @@ fatal: couldn't find remote ref main
 | --- | --- | --- | --- |
 | `MINIO_ROOT_USER` | 是 | `start.sh`、libreFS | S3 root access key 和 Console 用户名。 |
 | `MINIO_ROOT_PASSWORD` | 是 | `start.sh`、libreFS | S3 root secret key 和 Console 密码。 |
+| `OPS_TOKEN` | 建议 | ops-service | `/_ops/` 只读诊断入口 token；默认 demo 值只适合快速测试。 |
+| `ADMIN_TOKEN` | 开启 admin 时 | admin-service | `/_admin/` 独立 token；`ADMIN_ENABLED=true` 时必须设置。 |
 
 `start.sh` 会在缺少任一 Secret 时直接退出。这是有意设计，用来让错误配置尽早暴露。
 
@@ -55,6 +57,7 @@ fatal: couldn't find remote ref main
 | `LIBREFS_REF` | 否 | `master` | 只有要临时切 upstream branch/tag 时设置。 |
 | `LIBREFS_COMMIT` | 否 | `HEAD` | 只有要在 HF Variables 层做精确 commit pin 时设置；长期 pin 更适合写进 `Dockerfile` 默认值。 |
 | `GO_VERSION` | 否 | `1.26.3` | 只有 upstream 明确要求更换 Go 版本时设置。 |
+| `ADMIN_ENABLED` | 否 | `false` | 只有明确需要打开 `/_admin/` 时设置为 `true`。 |
 
 Docker Space 会把 Space Variables 作为 build-time `ARG` 传给 Docker build，也会在 runtime 注入为环境变量。因此 `GO_VERSION`、`LIBREFS_REF` 和 `LIBREFS_COMMIT` 可以通过 Space Variables 覆盖 Dockerfile 默认值。
 
@@ -70,6 +73,7 @@ blueskyxn-librefs-hfs.hf.space
 HF Secrets:
 - MINIO_ROOT_USER
 - MINIO_ROOT_PASSWORD
+- OPS_TOKEN
 
 HF Variables:
 - empty
@@ -108,10 +112,17 @@ HF Volume:
 | `LIBREFS_API_ADDR` | `:9000` | 内部 S3 API bind address。 |
 | `LIBREFS_CONSOLE_ADDR` | `:9001` | 内部 Console bind address。 |
 | `NGINX_CONF` | `/etc/nginx/nginx.conf` | Nginx 配置文件路径。 |
+| `OPS_HOST` | `127.0.0.1` | ops-service bind host；不要和 Nginx 静态路由不一致。 |
+| `OPS_PORT` | `8081` | ops-service port；不要和 Nginx 静态路由不一致。 |
+| `OPS_TOKEN` | `librefs_ops_demo_token` | `/_ops/` 诊断 token；公开长期运行建议用 HF Secret 覆盖。 |
+| `ADMIN_ENABLED` | `false` | 是否开启 `/_admin/`。 |
+| `ADMIN_HOST` | `127.0.0.1` | admin-service bind host；不要和 Nginx 静态路由不一致。 |
+| `ADMIN_PORT` | `8082` | admin-service port；不要和 Nginx 静态路由不一致。 |
+| `ADMIN_AUDIT_LOG` | `/data/logs/admin-audit.jsonl` | admin action 审计日志。 |
 | `MINIO_SERVER_URL` | 从公开根 URL 推导 | 公开 S3 endpoint。 |
 | `MINIO_BROWSER_REDIRECT_URL` | `${MINIO_SERVER_URL}/console/` | 公开 Console URL。 |
 
-除非同步修改 `nginx.conf`，不要随意修改 `LIBREFS_API_ADDR`、`LIBREFS_CONSOLE_ADDR` 和 `NGINX_CONF`。
+除非同步修改 `nginx.conf`，不要随意修改 `LIBREFS_API_ADDR`、`LIBREFS_CONSOLE_ADDR`、`OPS_HOST`、`OPS_PORT`、`ADMIN_HOST`、`ADMIN_PORT` 和 `NGINX_CONF`。
 
 如果覆盖 `MINIO_SERVER_URL`，值必须包含 `http://` 或 `https://` scheme，`start.sh` 会去掉多余尾部 `/`。如果覆盖 `MINIO_BROWSER_REDIRECT_URL`，值必须仍然落在 `/console/` 子路径；脚本会补齐末尾 `/`，但不会接受其他 Console 路径。
 
@@ -122,6 +133,8 @@ HF Volume:
 | `7860` | 公开 / Nginx | Hugging Face Space app port。 |
 | `9000` | 容器内部 | libreFS S3 API。 |
 | `9001` | 容器内部 | libreFS Web Console。 |
+| `8081` | 容器内部 | ops-service。 |
+| `8082` | 容器内部 | admin-service。 |
 
 HF Space 外部只暴露 `7860`。
 
@@ -130,8 +143,11 @@ HF Space 外部只暴露 `7860`。
 | 路径 | owner | 用途 |
 | --- | --- | --- |
 | `/data` | UID/GID `1000` | libreFS 对象数据和元数据。 |
+| `/data/logs` | UID/GID `1000` | admin audit log 和未来日志白名单目录。 |
 | `/tmp/nginx/*` | UID/GID `1000` | Nginx 临时目录。 |
 | `/usr/local/bin/librefs` | root-owned executable | 编译出来的 libreFS binary。 |
+| `/usr/local/bin/librefs-ops-service.py` | root-owned Python file | 只读 ops-service。 |
+| `/usr/local/bin/librefs-admin-service.py` | root-owned Python file | 默认关闭的 admin-service。 |
 | `/etc/nginx/nginx.conf` | root-owned config | 从仓库复制进去的 Nginx 配置。 |
 | `/start.sh` | root-owned executable | 容器启动命令。 |
 
@@ -140,9 +156,15 @@ HF Space 外部只暴露 `7860`。
 | 规则 | 行为 |
 | --- | --- |
 | `location = /console` | 重定向到 `/console/`。 |
+| `location = /_ops` | 重定向到 `/_ops/`。 |
+| `location /_ops/` | 转发到 `127.0.0.1:8081/`，并剥掉 `/_ops/` 前缀。 |
+| `location = /_admin` | 重定向到 `/_admin/`。 |
+| `location /_admin/` | 转发到 `127.0.0.1:8082/`，并剥掉 `/_admin/` 前缀。 |
 | `location /console/` | 转发到 `127.0.0.1:9001/`，并剥掉 `/console/` 前缀。 |
 | Console iframe headers | 隐藏 upstream `X-Frame-Options`，并设置允许 Hugging Face 页面嵌入的 `Content-Security-Policy frame-ancestors`。 |
 | `location /` | 其余请求全部转发到 `127.0.0.1:9000`。 |
+
+`/_ops/` 和 `/_admin/` 必须放在 `location /` 前面，否则这些保留路径会被 S3 API 根路径吞掉。
 
 Console proxy 必须使用：
 
@@ -160,6 +182,41 @@ add_header Content-Security-Policy "frame-ancestors 'self' https://huggingface.c
 ```
 
 这只影响 `/console/` 代理，不改变 S3 API 根路径的 header 行为。
+
+## Ops / Admin 配置
+
+`/_ops/` 是只读诊断面，支持：
+
+- `GET /_ops/health`
+- `GET /_ops/system`
+- `GET /_ops/config`
+- `GET /_ops/version`
+- `GET /_ops/metrics`
+
+鉴权支持：
+
+```bash
+curl -H "X-Ops-Token: $OPS_TOKEN" https://your-space.hf.space/_ops/health
+curl -H "Authorization: Bearer $OPS_TOKEN" https://your-space.hf.space/_ops/health
+```
+
+`?token=` 只适合临时浏览器调试，不建议写进文档、脚本或分享链接。
+
+`/_ops/config` 只返回 `MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`、`OPS_TOKEN`、`ADMIN_TOKEN` 是否存在，不返回真实值。
+
+`/_admin/` 是独立管理面，默认关闭：
+
+```bash
+ADMIN_ENABLED=false
+ADMIN_TOKEN=
+```
+
+开启时必须设置独立 `ADMIN_TOKEN`。当前白名单 action 只有：
+
+- `POST /_admin/api/actions/run-health-checks`
+- `POST /_admin/api/actions/reload-nginx`
+
+`reload-nginx` 需要 JSON body 包含 `{"confirm": true}`，并会写入 `ADMIN_AUDIT_LOG`。当前版本不提供 Web terminal、file manager、任意 shell command、bucket/policy/root credential 管理或 `librefs` restart。
 
 ## 凭证处理原则
 
