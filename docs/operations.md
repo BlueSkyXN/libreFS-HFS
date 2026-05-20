@@ -12,7 +12,7 @@ Console:
 https://blueskyxn-librefs-hfs.hf.space/console/
 ```
 
-最近生产回读时间：2026-05-20。当前 `origin/main`、`hf/main` 和 Space runtime sha 均为 `cc9504e2eb44e4155123bd5d55081f65a051d765`，Space stage 为 `RUNNING`。实时状态以本页命令重新查询为准。
+最近生产回读时间：2026-05-20。实时状态以本页命令重新查询为准；`origin/main`、`hf/main` 和 Space runtime sha 都不在文档中硬编码，避免文档在合并或推送后立即过期。
 
 ## 检查 Space 状态
 
