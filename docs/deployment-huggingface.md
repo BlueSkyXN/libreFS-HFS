@@ -37,6 +37,15 @@ hf spaces secrets add BlueSkyXN/libreFS-HFS \
   -s OPS_TOKEN='<strong-ops-token>'
 ```
 
+如果当前生产策略需要开启 `/_admin/`，还需要设置：
+
+```bash
+hf spaces secrets add BlueSkyXN/libreFS-HFS \
+  -s ADMIN_TOKEN='<strong-admin-token>'
+hf spaces variables add BlueSkyXN/libreFS-HFS \
+  -e ADMIN_ENABLED=true
+```
+
 查看已配置的 Secret 名称：
 
 ```bash
@@ -47,7 +56,7 @@ hf spaces secrets list BlueSkyXN/libreFS-HFS
 
 ## 可选 Variables
 
-默认部署不需要配置 HF Variables。不要把和代码默认值或 upstream 默认值相同的变量同步到 Hugging Face；这会让云端配置看起来像有很多“特殊设置”，实际只是噪音。
+代码默认部署不需要配置 HF Variables。不要把和代码默认值或 upstream 默认值相同的变量同步到 Hugging Face；这会让云端配置看起来像有很多“特殊设置”，实际只是噪音。当前生产环境为了开启 admin，已显式设置 `ADMIN_ENABLED=true`。
 
 | Variable | 默认值 | 什么时候设置 |
 | --- | --- | --- |
@@ -74,13 +83,19 @@ hf spaces variables add BlueSkyXN/libreFS-HFS \
 hf spaces variables list BlueSkyXN/libreFS-HFS
 ```
 
-默认预期是：
+代码默认预期是：
 
 ```text
 No results found.
 ```
 
-如果临时开启 admin，Variables 会出现 `ADMIN_ENABLED=true`；排障结束后建议关闭或移除。
+当前生产环境最近回读为：
+
+```text
+ADMIN_ENABLED=true
+```
+
+如果只做临时排障，排障结束后建议关闭或移除 `ADMIN_ENABLED`，让 `/_admin/` 回到代码默认关闭状态。
 
 本地可以维护 `.env.local` 记录真实 secret 值、当前 host、Storage Bucket、默认值说明和临时覆盖候选。`.env.local` 必须被 Git ignore，不应提交。
 
@@ -178,12 +193,16 @@ WebUI: https://blueskyxn-librefs-hfs.hf.space/console/
 2. 确认 `README.md` 里有 `app_port: 7860`。
 3. 配置 `MINIO_ROOT_USER`。
 4. 配置 `MINIO_ROOT_PASSWORD`。
-5. 推送仓库文件。
-6. 等待 Space stage 变为 `RUNNING`。
-7. 检查 `/minio/health/ready`。
-8. 打开 `/console/`。
-9. 使用 root 凭证登录 Console。
-10. 创建 bucket。
-11. 上传一个小文件。
-12. 用签名 S3 client 或 Console 下载对象。
-13. 如果需要公开直链，配置 public read bucket policy，并测试匿名 URL。
+5. 配置 `OPS_TOKEN`。
+6. 如果需要生产环境开启 admin，配置 `ADMIN_TOKEN` 和 `ADMIN_ENABLED=true`。
+7. 推送仓库文件。
+8. 等待 Space stage 变为 `RUNNING`。
+9. 检查 `/minio/health/ready`。
+10. 用 `OPS_TOKEN` 检查 `/_ops/health`。
+11. 如果已开启 admin，用 `ADMIN_TOKEN` 检查 `/_admin/api/status`；如果未开启，确认 `/_admin/` 返回 `404 admin_disabled`。
+12. 打开 `/console/`。
+13. 使用 root 凭证登录 Console。
+14. 创建 bucket。
+15. 上传一个小文件。
+16. 用签名 S3 client 或 Console 下载对象。
+17. 如果需要公开直链，配置 public read bucket policy，并测试匿名 URL。

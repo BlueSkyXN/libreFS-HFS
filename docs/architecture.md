@@ -124,7 +124,7 @@ Web Console 也是公网可访问，但需要登录。
 
 `/_ops/` 是只读诊断面，使用 `OPS_TOKEN` 保护。它可以返回 health、system、config、version 和 metrics，但 `/_ops/config` 只返回 secret 是否存在，不返回 secret 原文。不要把写操作、任意命令、SQL、文件读取或重启能力放进 `/_ops`。
 
-`/_admin/` 是独立管理面，默认 `ADMIN_ENABLED=false`。开启时必须设置独立 `ADMIN_TOKEN`。当前白名单 action 只有 `run-health-checks` 和 `reload-nginx`，其中 `reload-nginx` 需要 `confirm=true` 并写入 `/data/logs/admin-audit.jsonl`。当前版本不提供 Web terminal、file manager、bucket/policy/root credential 管理或 `librefs` restart。
+`/_admin/` 是独立管理面，代码默认 `ADMIN_ENABLED=false`。开启时必须设置 `ADMIN_TOKEN`，通过独立 header 或 bearer token 鉴权；代码不强制 `ADMIN_TOKEN` 和 `OPS_TOKEN` 的值不同。当前生产环境已显式设置 `ADMIN_ENABLED=true`。当前白名单 action 只有 `run-health-checks` 和 `reload-nginx`，其中 `reload-nginx` 需要 `confirm=true` 并写入 `/data/logs/admin-audit.jsonl`。当前版本不提供 Web terminal、file manager、bucket/policy/root credential 管理或 `librefs` restart。
 
 ops/admin JSON 支持 `en` 和 `zh-CN` 文案。`error`、endpoint path 和 action `name` 保持机器可读稳定值；`message`、`hint`、`label`、`description`、`risk` 和 `notes` 按 `?lang=`、`X-Control-Language`、`Accept-Language` 或 `CONTROL_PLANE_DEFAULT_LANG` 返回对应语言，避免管理界面误读危险操作。
 

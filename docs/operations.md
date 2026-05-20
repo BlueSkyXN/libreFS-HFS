@@ -12,6 +12,8 @@ Console:
 https://blueskyxn-librefs-hfs.hf.space/console/
 ```
 
+最近生产回读时间：2026-05-20。当前 `origin/main`、`hf/main` 和 Space runtime sha 均为 `cc9504e2eb44e4155123bd5d55081f65a051d765`，Space stage 为 `RUNNING`。实时状态以本页命令重新查询为准。
+
 ## 检查 Space 状态
 
 ```bash
@@ -103,7 +105,7 @@ curl -fsS -H "X-Admin-Token: $ADMIN_TOKEN" \
 
 ## Admin 管理入口
 
-`/_admin/` 默认关闭：
+`/_admin/` 的代码默认值是关闭：
 
 ```text
 ADMIN_ENABLED=false
@@ -123,6 +125,8 @@ curl -i https://blueskyxn-librefs-hfs.hf.space/_admin/
 ADMIN_ENABLED=true
 ADMIN_TOKEN=<strong-random-token>
 ```
+
+当前生产环境已经设置 `ADMIN_ENABLED=true` 并配置 `ADMIN_TOKEN`。因此线上无 token 访问应返回 `401 unauthorized`，带有效 `ADMIN_TOKEN` 访问 `/_admin/api/status` 应返回 `enabled: true`。
 
 当前白名单 action：
 
@@ -294,7 +298,7 @@ hf spaces restart BlueSkyXN/libreFS-HFS
 
 ## 环境配置维护
 
-建议配置模型是：
+代码默认部署的建议配置模型是：
 
 ```text
 HF Secrets:
@@ -304,6 +308,22 @@ HF Secrets:
 
 HF Variables:
 - empty
+
+HF Volume:
+- BlueSkyXN/libreFS-HFS-storage -> /data
+```
+
+当前生产环境最近回读为：
+
+```text
+HF Secrets:
+- MINIO_ROOT_USER
+- MINIO_ROOT_PASSWORD
+- OPS_TOKEN
+- ADMIN_TOKEN
+
+HF Variables:
+- ADMIN_ENABLED=true
 
 HF Volume:
 - BlueSkyXN/libreFS-HFS-storage -> /data
@@ -325,13 +345,15 @@ hf spaces secrets list BlueSkyXN/libreFS-HFS
 hf spaces volumes list BlueSkyXN/libreFS-HFS
 ```
 
-启用 ops 后的推荐预期：
+代码默认只启用 ops 时的预期：
 
 ```text
 variables: No results found.
 secrets: MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, OPS_TOKEN
 volume: BlueSkyXN/libreFS-HFS-storage -> /data
 ```
+
+当前生产启用了 admin，因此 `variables` 不应为空，`secrets` 也应包含 `ADMIN_TOKEN`。HF CLI 不回显 Secret value，只能回读 key；需要确认 value 是否同步时，用本地 `.env.local` 的 token 调线上 `/_ops/` 或 `/_admin/` 验证。
 
 ## 持久化检查
 
