@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hmac
+import html
 import json
 import os
 import socket
@@ -360,6 +361,438 @@ def metrics_payload() -> str:
     return "\n".join(lines) + "\n"
 
 
+def format_bytes(value: Any) -> str:
+    if not isinstance(value, (int, float)):
+        return "n/a"
+    size = float(value)
+    for unit in ["B", "KiB", "MiB", "GiB", "TiB"]:
+        if abs(size) < 1024 or unit == "TiB":
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}"
+        size /= 1024
+    return f"{size:.1f} TiB"
+
+
+def format_seconds(value: Any) -> str:
+    if not isinstance(value, (int, float)):
+        return "n/a"
+    seconds = int(value)
+    days, seconds = divmod(seconds, 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hours or parts:
+        parts.append(f"{hours}h")
+    if minutes or parts:
+        parts.append(f"{minutes}m")
+    parts.append(f"{seconds}s")
+    return " ".join(parts)
+
+
+def json_block(payload: Any) -> str:
+    data = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2)
+    return html.escape(data)
+
+
+def table_rows(rows: list[tuple[str, Any]]) -> str:
+    body = []
+    for key, value in rows:
+        body.append(
+            "<tr>"
+            f"<th scope=\"row\">{html.escape(str(key))}</th>"
+            f"<td>{html.escape(str(value))}</td>"
+            "</tr>"
+        )
+    return "\n".join(body)
+
+
+def badge(ok: Any, true_label: str, false_label: str) -> str:
+    label = true_label if ok else false_label
+    tone = "ok" if ok else "bad"
+    return f"<span class=\"badge {tone}\">{html.escape(label)}</span>"
+
+
+def render_ops_dashboard(language: str) -> str:
+    labels = {
+        "zh-CN": {
+            "title": "LibreFS HFS 只读诊断面板",
+            "subtitle": "一次性聚合 health、system、config、version 和 metrics；Secret 原文不会显示。",
+            "healthy": "健康状态",
+            "checks": "检查项",
+            "ops_uptime": "Ops 运行时间",
+            "system_uptime": "系统运行时间",
+            "data_disk": "数据盘使用",
+            "routes": "路由",
+            "health_checks": "健康检查",
+            "system": "系统资源",
+            "config": "配置摘要",
+            "secrets": "Secret 状态",
+            "version": "版本与运行时",
+            "metrics": "Prometheus Metrics",
+            "raw": "原始 JSON",
+            "ok": "正常",
+            "bad": "异常",
+            "present": "已配置",
+            "missing": "未配置",
+            "open_console": "打开 Console",
+            "open_admin": "打开 Admin API",
+            "refresh": "刷新页面",
+        },
+        "en": {
+            "title": "LibreFS HFS read-only diagnostics",
+            "subtitle": "A single view for health, system, config, version, and metrics. Secret values are omitted.",
+            "healthy": "Health",
+            "checks": "Checks",
+            "ops_uptime": "Ops uptime",
+            "system_uptime": "System uptime",
+            "data_disk": "Data disk used",
+            "routes": "Routes",
+            "health_checks": "Health checks",
+            "system": "System resources",
+            "config": "Config summary",
+            "secrets": "Secret status",
+            "version": "Version and runtime",
+            "metrics": "Prometheus metrics",
+            "raw": "Raw JSON",
+            "ok": "OK",
+            "bad": "Failed",
+            "present": "Present",
+            "missing": "Missing",
+            "open_console": "Open Console",
+            "open_admin": "Open Admin API",
+            "refresh": "Refresh",
+        },
+    }.get(language, {})
+
+    health = health_payload()
+    system = system_payload()
+    config = config_payload(language)
+    version = version_payload()
+    metrics = metrics_payload()
+
+    checks = health.get("checks", [])
+    passed_checks = sum(1 for check in checks if check.get("ok"))
+    data_disk = system.get("data_disk", {})
+    data_disk_used = data_disk.get("used_percent")
+    data_disk_label = f"{data_disk_used}%" if data_disk_used is not None else "n/a"
+    query = "?format=json"
+
+    check_rows = []
+    for check in checks:
+        target = check.get("url") or f"{check.get('host', '')}:{check.get('port', '')}"
+        detail = check.get("status") or check.get("error") or ""
+        check_rows.append(
+            "<tr>"
+            f"<th scope=\"row\">{html.escape(str(check.get('name', 'unknown')))}</th>"
+            f"<td>{html.escape(str(check.get('type', '')))}</td>"
+            f"<td>{html.escape(str(target))}</td>"
+            f"<td>{badge(check.get('ok'), labels['ok'], labels['bad'])}</td>"
+            f"<td>{html.escape(str(check.get('duration_ms', 'n/a')))} ms</td>"
+            f"<td>{html.escape(str(detail))}</td>"
+            "</tr>"
+        )
+
+    safe_config_rows = [(key, value) for key, value in config.get("safe_config", {}).items()]
+    if not safe_config_rows:
+        safe_config_rows = [("safe_config", "empty")]
+
+    secret_rows = [
+        (key, labels["present"] if present else labels["missing"])
+        for key, present in config.get("secret_present", {}).items()
+    ]
+
+    memory = system.get("memory", {})
+    tmp_disk = system.get("tmp_disk", {})
+    version_container = version.get("container", {})
+    version_rows = [
+        ("librefs_ref", version.get("librefs_ref")),
+        ("librefs_commit", version.get("librefs_commit")),
+        ("go_version", version.get("go_version")),
+        ("ubuntu_version", version.get("ubuntu_version")),
+        ("space_id", version.get("space_id")),
+        ("space_host", version.get("space_host")),
+        ("python", version_container.get("python")),
+        ("pid", version_container.get("pid")),
+    ]
+
+    return f"""<!doctype html>
+<html lang="{html.escape(language)}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(labels["title"])}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f2efe7;
+      --ink: #17211b;
+      --muted: #68746d;
+      --panel: rgba(255, 252, 244, 0.88);
+      --line: #d8d0bf;
+      --ok: #127a4a;
+      --bad: #b42318;
+      --accent: #a95b1b;
+      --shadow: 0 24px 70px rgba(44, 35, 21, 0.16);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 8%, rgba(169, 91, 27, 0.22), transparent 28rem),
+        radial-gradient(circle at 92% 10%, rgba(18, 122, 74, 0.16), transparent 26rem),
+        linear-gradient(135deg, #f8f1df 0%, var(--bg) 44%, #e8eadf 100%);
+      font-family: "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
+    }}
+    main {{
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 54px;
+    }}
+    header.hero {{
+      display: grid;
+      grid-template-columns: 1.4fr auto;
+      gap: 20px;
+      align-items: end;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }}
+    h1 {{
+      margin: 0;
+      max-width: 780px;
+      font-size: clamp(2rem, 4vw, 4.5rem);
+      line-height: 0.95;
+      letter-spacing: -0.055em;
+    }}
+    .subtitle {{
+      margin: 16px 0 0;
+      max-width: 720px;
+      color: var(--muted);
+      font-size: 1.02rem;
+      line-height: 1.55;
+    }}
+    .actions {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }}
+    .button {{
+      display: inline-flex;
+      align-items: center;
+      min-height: 42px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--ink);
+      background: rgba(255,255,255,0.58);
+      text-decoration: none;
+      font-weight: 700;
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin: 18px 0;
+    }}
+    .card, section {{
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: var(--panel);
+      box-shadow: 0 12px 30px rgba(44, 35, 21, 0.08);
+    }}
+    .card {{
+      padding: 18px;
+    }}
+    .kicker {{
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }}
+    .value {{
+      margin-top: 10px;
+      font-size: clamp(1.3rem, 2.1vw, 2.1rem);
+      font-weight: 850;
+      letter-spacing: -0.035em;
+    }}
+    section {{
+      margin-top: 16px;
+      overflow: hidden;
+    }}
+    section h2 {{
+      margin: 0;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      font-size: 1rem;
+      letter-spacing: 0.01em;
+    }}
+    .section-body {{
+      padding: 18px 20px;
+      overflow-x: auto;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 620px;
+    }}
+    th, td {{
+      padding: 11px 10px;
+      border-bottom: 1px solid rgba(216, 208, 191, 0.72);
+      text-align: left;
+      vertical-align: top;
+      font-size: 0.94rem;
+    }}
+    th {{
+      width: 210px;
+      font-weight: 800;
+    }}
+    tr:last-child th, tr:last-child td {{ border-bottom: 0; }}
+    .badge {{
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 9px;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 0.76rem;
+      font-weight: 850;
+    }}
+    .badge.ok {{ background: var(--ok); }}
+    .badge.bad {{ background: var(--bad); }}
+    pre {{
+      margin: 0;
+      padding: 16px;
+      border-radius: 16px;
+      background: #17211b;
+      color: #f7efd8;
+      overflow: auto;
+      font: 0.86rem/1.55 "Menlo", "Monaco", "Consolas", monospace;
+    }}
+    details {{
+      margin-top: 12px;
+    }}
+    summary {{
+      cursor: pointer;
+      color: var(--accent);
+      font-weight: 850;
+    }}
+    @media (max-width: 850px) {{
+      header.hero {{ grid-template-columns: 1fr; }}
+      .actions {{ justify-content: flex-start; }}
+      .grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+    }}
+    @media (max-width: 560px) {{
+      main {{ width: min(100vw - 20px, 1180px); padding-top: 10px; }}
+      header.hero {{ padding: 20px; border-radius: 20px; }}
+      .grid {{ grid-template-columns: 1fr; }}
+      table {{ min-width: 520px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <div>
+        <h1>{html.escape(labels["title"])}</h1>
+        <p class="subtitle">{html.escape(labels["subtitle"])}</p>
+      </div>
+      <nav class="actions" aria-label="Ops links">
+        <a class="button" href="/console/">{html.escape(labels["open_console"])}</a>
+        <a class="button" href="/_admin/">{html.escape(labels["open_admin"])}</a>
+        <a class="button" href="">{html.escape(labels["refresh"])}</a>
+        <a class="button" href="{query}">JSON</a>
+      </nav>
+    </header>
+
+    <div class="grid" aria-label="Summary">
+      <article class="card">
+        <div class="kicker">{html.escape(labels["healthy"])}</div>
+        <div class="value">{badge(health.get("ok"), labels["ok"], labels["bad"])}</div>
+      </article>
+      <article class="card">
+        <div class="kicker">{html.escape(labels["checks"])}</div>
+        <div class="value">{passed_checks}/{len(checks)}</div>
+      </article>
+      <article class="card">
+        <div class="kicker">{html.escape(labels["ops_uptime"])}</div>
+        <div class="value">{html.escape(format_seconds(health.get("ops", {}).get("uptime_seconds")))}</div>
+      </article>
+      <article class="card">
+        <div class="kicker">{html.escape(labels["data_disk"])}</div>
+        <div class="value">{html.escape(data_disk_label)}</div>
+      </article>
+    </div>
+
+    <section>
+      <h2>{html.escape(labels["health_checks"])}</h2>
+      <div class="section-body">
+        <table>
+          <thead><tr><th>Name</th><th>Type</th><th>Target</th><th>Status</th><th>Latency</th><th>Detail</th></tr></thead>
+          <tbody>{"".join(check_rows)}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>{html.escape(labels["system"])}</h2>
+      <div class="section-body">
+        <table><tbody>{table_rows([
+            ("time", system.get("time")),
+            ("ops_uptime", format_seconds(system.get("ops_uptime_seconds"))),
+            ("system_uptime", format_seconds(system.get("system_uptime_seconds"))),
+            ("load", system.get("load")),
+            ("memory_total", format_bytes(memory.get("total_bytes"))),
+            ("memory_available", format_bytes(memory.get("available_bytes"))),
+            ("data_disk", f"{format_bytes(data_disk.get('used_bytes'))} used / {format_bytes(data_disk.get('total_bytes'))} total"),
+            ("tmp_disk", f"{format_bytes(tmp_disk.get('used_bytes'))} used / {format_bytes(tmp_disk.get('total_bytes'))} total"),
+            ("process_count", system.get("process_count")),
+        ])}</tbody></table>
+      </div>
+    </section>
+
+    <section>
+      <h2>{html.escape(labels["config"])}</h2>
+      <div class="section-body">
+        <table><tbody>{table_rows(safe_config_rows)}</tbody></table>
+        <h2>{html.escape(labels["secrets"])}</h2>
+        <table><tbody>{table_rows(secret_rows)}</tbody></table>
+      </div>
+    </section>
+
+    <section>
+      <h2>{html.escape(labels["version"])}</h2>
+      <div class="section-body">
+        <table><tbody>{table_rows(version_rows)}</tbody></table>
+      </div>
+    </section>
+
+    <section>
+      <h2>{html.escape(labels["metrics"])}</h2>
+      <div class="section-body">
+        <pre>{html.escape(metrics)}</pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>{html.escape(labels["raw"])}</h2>
+      <div class="section-body">
+        <details><summary>health</summary><pre>{json_block(health)}</pre></details>
+        <details><summary>system</summary><pre>{json_block(system)}</pre></details>
+        <details><summary>config</summary><pre>{json_block(config)}</pre></details>
+        <details><summary>version</summary><pre>{json_block(version)}</pre></details>
+      </div>
+    </section>
+  </main>
+</body>
+</html>"""
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "librefs-hfs-ops/1.0"
 
@@ -410,6 +843,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def wants_html(self) -> bool:
+        fmt = self.query().get("format", [""])[0].strip().lower()
+        if fmt in {"json", "api"}:
+            return False
+        if fmt in {"html", "dashboard"}:
+            return True
+        return "text/html" in self.headers.get("Accept", "")
+
     def bearer_token(self) -> str:
         auth = self.headers.get("Authorization", "")
         if auth.lower().startswith("bearer "):
@@ -451,6 +892,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if path in {"/", ""}:
             language = self.language()
+            if self.wants_html():
+                self.send_text(render_ops_dashboard(language), content_type="text/html; charset=utf-8")
+                return
             self.send_json(
                 {
                     "ok": True,
