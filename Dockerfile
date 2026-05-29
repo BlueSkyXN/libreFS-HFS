@@ -39,9 +39,16 @@ WORKDIR /src
 
 RUN git init . \
     && git remote add origin https://github.com/libreFS/libreFS.git \
-    && git fetch --depth 1 origin "${LIBREFS_REF}" \
-    && git checkout --detach FETCH_HEAD \
-    && if [ "${LIBREFS_COMMIT}" != "HEAD" ]; then test "$(git rev-parse HEAD)" = "${LIBREFS_COMMIT}"; fi
+    && if [ "${LIBREFS_COMMIT}" = "HEAD" ]; then \
+        git fetch --depth 1 origin "${LIBREFS_REF}" \
+        && git checkout --detach FETCH_HEAD; \
+      else \
+        printf '%s' "${LIBREFS_COMMIT}" | grep -Eq '^[0-9a-f]{40}$' \
+        || { echo "LIBREFS_COMMIT must be a 40-character lowercase commit SHA or HEAD" >&2; exit 1; }; \
+        git fetch --depth 1 origin "${LIBREFS_COMMIT}" \
+        && git checkout --detach "${LIBREFS_COMMIT}" \
+        && test "$(git rev-parse HEAD)" = "${LIBREFS_COMMIT}"; \
+      fi
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/root/go/pkg/mod \

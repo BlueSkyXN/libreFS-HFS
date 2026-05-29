@@ -90,7 +90,7 @@ token 验证成功后，服务会设置 `Secure; HttpOnly; SameSite=Lax; Path=/_
 https://blueskyxn-librefs-hfs.hf.space/_ops/logout
 ```
 
-不要长期使用、记录或分享带 `?token=` 的 URL；token 可能进入浏览器历史、代理日志、截图或聊天记录。脚本和自动化继续使用 header。
+不要长期使用、记录或分享带 `?token=` 的 URL；token 可能进入浏览器历史、外部代理日志、截图或聊天记录。容器内 Nginx access log 不记录 query string，ops-service 日志会 redact `token=` 值，并且 ops 响应带 `Referrer-Policy: no-referrer`；脚本和自动化继续使用 header。
 
 常用检查：
 
@@ -427,7 +427,7 @@ hf spaces volumes list BlueSkyXN/libreFS-HFS
 | --- | --- | --- | --- |
 | 未挂载持久化 storage | 对象可能丢失 | 当前 `hf spaces volumes list` 显示已挂载 `/data` bucket | 如发现 volume 缺失，先停止写入并恢复挂载。 |
 | HF Space sleep/restart | 可能短时不可用 | 预期行为 | 作为轻量服务使用。 |
-| libreFS 上游 `master` 变化 | rebuild 行为可能变化 | 部分受控 | 发布态必须设置具体 `LIBREFS_COMMIT=<upstream commit sha>`；`master + HEAD` 只算开发默认。 |
+| libreFS 上游 `master` 变化 | 未 pin 的 rebuild 行为可能变化 | 部分受控 | 发布态必须设置具体 `LIBREFS_COMMIT=<upstream commit sha>`；设置后 Docker build 会直接 fetch/checkout 该 commit，`master + HEAD` 只算开发默认。 |
 | Console 子路径回归 | Console 页面空白 | 当前已修复 | 检查 JS/CSS MIME 和登录页。 |
 | bucket policy 配错 | 私有对象被公开 | 用户侧风险 | 使用最小 policy，设置后复查。 |
 | `cpu-basic` 资源限制 | 上传/下载慢，吞吐低 | 预期行为 | 重负载时升级硬件并压测。 |

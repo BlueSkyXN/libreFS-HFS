@@ -89,6 +89,10 @@ require_pattern hfs-dev.toml 'UBUNTU_BASE_IMAGE=.*@sha256' 'Ubuntu base image di
 check "Dockerfile contract" require_pattern Dockerfile '^FROM ubuntu:\$\{UBUNTU_VERSION\} AS builder$' 'builder must stay on Ubuntu'
 require_pattern Dockerfile '^FROM ubuntu:\$\{UBUNTU_VERSION\}$' 'runtime must stay on Ubuntu'
 require_pattern Dockerfile 'git remote add origin https://github\.com/libreFS/libreFS\.git' 'build must fetch libreFS upstream source'
+require_pattern Dockerfile 'git fetch --depth 1 origin "\$\{LIBREFS_REF\}"' 'development builds must fetch the configured libreFS ref'
+require_pattern Dockerfile 'git fetch --depth 1 origin "\$\{LIBREFS_COMMIT\}"' 'release builds must fetch the pinned libreFS commit directly'
+require_pattern Dockerfile 'git checkout --detach "\$\{LIBREFS_COMMIT\}"' 'release builds must checkout the pinned libreFS commit'
+require_pattern Dockerfile 'LIBREFS_COMMIT must be a 40-character lowercase commit SHA or HEAD' 'release pin must reject non-SHA LIBREFS_COMMIT values'
 require_pattern Dockerfile 'python3' 'runtime must include Python for ops/admin services'
 require_pattern Dockerfile 'librefs-ops-service\.py' 'runtime must copy ops service'
 require_pattern Dockerfile 'librefs-admin-service\.py' 'runtime must copy admin service'
@@ -120,15 +124,24 @@ require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:9001/;' 'Console 
 require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:9000;' 'S3 API must stay at the root path'
 require_pattern hfs/nginx.conf 'proxy_hide_header X-Frame-Options;' 'Console proxy must hide upstream X-Frame-Options'
 require_pattern hfs/nginx.conf 'frame-ancestors.*huggingface\.co' 'Console CSP must allow Hugging Face iframe embedding'
+require_pattern hfs/nginx.conf 'log_format main' 'Nginx access logs must use a custom query-free format'
+require_pattern hfs/nginx.conf 'access_log /dev/stdout main;' 'Nginx access logs must not use the default query-string format'
 
 check "ops/admin service contract" require_pattern hfs/ops_service.py 'SECRET_KEYS' 'ops service must summarize secret presence only'
 require_pattern hfs/ops_service.py 'secret values are intentionally omitted' 'ops config must not return raw secrets'
 require_pattern hfs/ops_service.py 'path in \{"/", ""\}.*query_token.*wants_html' 'query token must only bootstrap browser login at /_ops/'
+require_pattern hfs/ops_service.py 'redact_query_token' 'ops service logs must redact query token values'
+require_pattern hfs/ops_service.py 'Referrer-Policy' 'ops responses must suppress browser referrer leakage'
 require_pattern hfs/admin_service.py 'ADMIN_ENABLED.*false' 'admin service must default to disabled'
 require_pattern hfs/admin_service.py 'confirm=true is required' 'admin write action must require explicit confirm'
 
 if sed -n '/def request_tokens/,/def request_token/p' hfs/ops_service.py | grep -q 'query_token'; then
   echo "Contract check failed: query token must not be accepted as script/API authentication" >&2
+  exit 1
+fi
+
+if grep -Eq 'access_log /dev/stdout;' hfs/nginx.conf; then
+  echo "Contract check failed: Nginx access logs must not use the default query-string format" >&2
   exit 1
 fi
 

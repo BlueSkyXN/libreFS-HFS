@@ -91,12 +91,19 @@ builder stage 使用 `ubuntu:${UBUNTU_VERSION}`，然后安装最小依赖：
 ```dockerfile
 RUN git init . \
     && git remote add origin https://github.com/libreFS/libreFS.git \
-    && git fetch --depth 1 origin "${LIBREFS_REF}" \
-    && git checkout --detach FETCH_HEAD \
-    && if [ "${LIBREFS_COMMIT}" != "HEAD" ]; then test "$(git rev-parse HEAD)" = "${LIBREFS_COMMIT}"; fi
+    && if [ "${LIBREFS_COMMIT}" = "HEAD" ]; then \
+        git fetch --depth 1 origin "${LIBREFS_REF}" \
+        && git checkout --detach FETCH_HEAD; \
+      else \
+        printf '%s' "${LIBREFS_COMMIT}" | grep -Eq '^[0-9a-f]{40}$' \
+        || { echo "LIBREFS_COMMIT must be a 40-character lowercase commit SHA or HEAD" >&2; exit 1; }; \
+        git fetch --depth 1 origin "${LIBREFS_COMMIT}" \
+        && git checkout --detach "${LIBREFS_COMMIT}" \
+        && test "$(git rev-parse HEAD)" = "${LIBREFS_COMMIT}"; \
+      fi
 ```
 
-这里用 `fetch --depth 1` 控制 build 成本。`LIBREFS_REF` 默认是 `master`，因为 libreFS upstream 默认分支不是 `main`。
+这里用 `fetch --depth 1` 控制 build 成本。`LIBREFS_COMMIT=HEAD` 时按 `LIBREFS_REF` 获取开发默认源码；发布态设置具体 commit SHA 时直接 fetch/checkout 该 commit，并用 `git rev-parse HEAD` 再校验。`LIBREFS_REF` 默认是 `master`，因为 libreFS upstream 默认分支不是 `main`。
 
 编译命令是：
 
@@ -317,6 +324,8 @@ ops 鉴权支持三种方式：
 - 浏览器 `HttpOnly` cookie
 
 `/_ops/?token=<ops-token>` 只作为浏览器首次登录入口。验证成功后，服务设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转到不带 token 的 URL。后续浏览器点击 dashboard、JSON 索引或各 API endpoint 时复用 cookie；脚本和 JSON API 请求不接受 query token 鉴权，必须使用 header/bearer token 或浏览器 cookie。
+
+为降低临时 URL token 泄漏面，`hfs/nginx.conf` 的 access log 使用不含 query string 的自定义格式；ops-service 自身请求日志会 redact `token=` 值，并在 ops 响应中设置 `Referrer-Policy: no-referrer`。这只降低容器内日志和跳转 referer 风险，外部代理、浏览器历史、截图和聊天记录仍可能暴露带 token 的 URL。
 
 ## `.dockerignore`
 

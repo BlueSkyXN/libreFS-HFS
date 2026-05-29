@@ -83,7 +83,7 @@ Rules:
 - 本仓库不是上游 libreFS 源码仓库；不要 vendor、复制或手写大段 libreFS 源码。
 - 当前部署策略明确要求 Ubuntu builder + Ubuntu runtime，不使用 libreFS 官方 Docker image。改这个策略前必须得到用户明确确认。
 - libreFS upstream 默认 ref 当前写为 `master`。不要把 `LIBREFS_REF` 改成 `main`，除非先用只读命令确认上游默认分支已变化，并同步更新 docs。
-- `LIBREFS_COMMIT=HEAD` 表示不 pin 精确 commit；如果改成具体 commit，Docker build 中的 `git rev-parse HEAD` 校验必须保留。
+- `LIBREFS_COMMIT=HEAD` 表示不 pin 精确 commit；如果改成具体 commit，Docker build 必须直接 fetch/checkout 该 commit，并保留 `git rev-parse HEAD` 校验。
 - `README.md` front matter 的 `sdk: docker` 和 `app_port: 7860` 是 HF Space 行为契约。`app_port` 必须与 `hfs/nginx.conf` 的 `listen 7860` 和 Dockerfile `EXPOSE 7860` 保持一致。
 - `license: agpl-3.0`、`LICENSE` 文件和上游 libreFS 许可证必须保持一致。不要把许可证降级或改成普通 GPL。
 - Runtime 以 UID/GID `1000` 运行，但 Dockerfile 必须兼容 UID/GID 已存在的情况；不要退回无条件 `useradd -m -u 1000 user`。

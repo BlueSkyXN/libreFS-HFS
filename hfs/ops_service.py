@@ -7,6 +7,7 @@ import hmac
 import html
 import json
 import os
+import re
 import socket
 import sys
 import time
@@ -23,6 +24,7 @@ STARTED_AT = time.time()
 SUPPORTED_LANGUAGES = ("zh-CN", "en")
 DEFAULT_LANGUAGE = "en"
 OPS_COOKIE_NAME = "librefs_hfs_ops_token"
+TOKEN_QUERY_RE = re.compile(r"([?&]token=)[^&\s\"]+")
 
 MESSAGES = {
     "root_description": {
@@ -78,6 +80,10 @@ SECRET_KEYS = [
 
 def env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
+
+
+def redact_query_token(value: str) -> str:
+    return TOKEN_QUERY_RE.sub(r"\1[REDACTED]", value)
 
 
 def parse_int(value: Any, default: int, minimum: int | None = None, maximum: int | None = None) -> int:
@@ -934,7 +940,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "librefs-hfs-ops/1.0"
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        print(f"{self.address_string()} - {fmt % args}", flush=True)
+        print(f"{self.address_string()} - {redact_query_token(fmt % args)}", flush=True)
 
     def normalized_path(self) -> str:
         path = urllib.parse.urlsplit(self.path).path
@@ -967,6 +973,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -976,6 +983,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -1003,6 +1011,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(303)
         self.send_header("Location", location)
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Referrer-Policy", "no-referrer")
         if token:
             self.send_ops_cookie(token)
         if clear_cookie:
