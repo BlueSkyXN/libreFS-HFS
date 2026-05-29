@@ -2,6 +2,8 @@
 
 这个项目是一个 Hugging Face Docker Space 部署包。仓库本身不包含 libreFS 源码；`Dockerfile` 会在 Hugging Face 远端 build 阶段从 `https://github.com/libreFS/libreFS.git` 拉取源码并编译二进制。
 
+按 HFS 开发范式，本仓库属于 Pattern A：repo root 是 Space root 和 GitHub 维护 root；多进程 runtime glue 统一放在 `hfs/`。
+
 当前目标很明确：
 
 - 使用 Ubuntu build/runtime 镜像。
@@ -17,10 +19,11 @@
 | --- | --- | --- |
 | `README.md` | 是 | Hugging Face Space card metadata 和项目入口说明。 |
 | `Dockerfile` | 是 | 定义远端 build 和 runtime 镜像。 |
-| `start.sh` | 是 | 容器启动入口，负责设置 URL 环境变量、启动 libreFS、ops-service、admin-service 和 Nginx。 |
-| `nginx.conf` | 是 | 单端口反向代理配置，把 `/_ops/`、`/_admin/`、`/console/` 和 `/` 分发到不同内部端口。 |
-| `ops_service.py` | 是 | 只读诊断服务。 |
-| `admin_service.py` | 是 | 默认关闭的管理服务。 |
+| `hfs-dev.toml` | 否 | HFS 开发范式 alignment manifest，声明 Pattern A、`source-fetch`、repo-root Space root 和 release pin surface。 |
+| `hfs/start.sh` | 是 | 容器启动入口，负责设置 URL 环境变量、启动 libreFS、ops-service、admin-service 和 Nginx。 |
+| `hfs/nginx.conf` | 是 | 单端口反向代理配置，把 `/_ops/`、`/_admin/`、`/console/` 和 `/` 分发到不同内部端口。 |
+| `hfs/ops_service.py` | 是 | 只读诊断服务，提供浏览器 dashboard、token/cookie 登录态和 JSON/metrics API。 |
+| `hfs/admin_service.py` | 是 | 默认关闭的管理服务。 |
 | `.dockerignore` | 是 | 控制 Docker build context，避免把本地临时文件送到远端 build。 |
 | `.gitattributes` | 是 | Hugging Face 仓库的 LFS 类型规则。 |
 | `.gitignore` | 否 | 本地 Git 忽略规则。 |
@@ -51,7 +54,7 @@ license: agpl-3.0
 | 字段 | 含义 | 修改影响 |
 | --- | --- | --- |
 | `sdk: docker` | 告诉 HF 使用 Docker Space。 | 改错会导致 Space 不再按 Dockerfile 构建。 |
-| `app_port: 7860` | 告诉 HF 外部流量转发到容器内 `7860`。 | 必须和 `nginx.conf` 的 `listen 7860` 一致。 |
+| `app_port: 7860` | 告诉 HF 外部流量转发到容器内 `7860`。 | 必须和 `hfs/nginx.conf` 的 `listen 7860` 一致。 |
 | `license: agpl-3.0` | 对齐 libreFS 的 AGPL-3.0 许可证。 | 只影响仓库展示和合规标识。 |
 
 第二，它作为快速入口，列出当前线上地址、必需 secrets、主要文档和健康检查命令。不要在 `README.md` 写真实密码；只写 secret 名称和占位符。
@@ -133,10 +136,10 @@ runtime 只复制五个运行文件：
 | 来源 | 目标 | 权限 |
 | --- | --- | --- |
 | `/out/librefs` | `/usr/local/bin/librefs` | `0755` |
-| `ops_service.py` | `/usr/local/bin/librefs-ops-service.py` | `0644` |
-| `admin_service.py` | `/usr/local/bin/librefs-admin-service.py` | `0644` |
-| `nginx.conf` | `/etc/nginx/nginx.conf` | `0644` |
-| `start.sh` | `/start.sh` | `0755` |
+| `hfs/ops_service.py` | `/usr/local/bin/librefs-ops-service.py` | `0644` |
+| `hfs/admin_service.py` | `/usr/local/bin/librefs-admin-service.py` | `0644` |
+| `hfs/nginx.conf` | `/etc/nginx/nginx.conf` | `0644` |
+| `hfs/start.sh` | `/start.sh` | `0755` |
 
 容器最终以 `USER ${APP_UID}:${APP_GID}` 运行，不依赖 root runtime 权限。
 
@@ -154,9 +157,9 @@ http://127.0.0.1:7860/minio/health/ready
 https://blueskyxn-librefs-hfs.hf.space/minio/health/ready
 ```
 
-## `start.sh`
+## `hfs/start.sh`
 
-`start.sh` 是 runtime 入口，由 Dockerfile 的 `CMD ["/start.sh"]` 调用。
+`hfs/start.sh` 是 runtime 入口，由 Dockerfile 的 `CMD ["/start.sh"]` 调用。
 
 ### 启动前校验
 
@@ -228,9 +231,9 @@ nginx -c "$NGINX_CONF" -g "daemon off;" &
 - 收到 `INT` 或 `TERM`，同时关闭 libreFS、ops-service、admin-service 和 Nginx。
 - `tini` 作为 PID 1，负责更可靠地转发信号和回收进程。
 
-## `nginx.conf`
+## `hfs/nginx.conf`
 
-`nginx.conf` 解决 Hugging Face Docker Space 只能对外暴露一个 app port 的限制。
+`hfs/nginx.conf` 解决 Hugging Face Docker Space 只能对外暴露一个 app port 的限制。
 
 内部端口：
 
@@ -246,7 +249,7 @@ nginx -c "$NGINX_CONF" -g "daemon off;" &
 
 | 外部路径 | 内部目标 | 说明 |
 | --- | --- | --- |
-| `/_ops/` | `http://127.0.0.1:8081/` | 只读诊断入口。 |
+| `/_ops/` | `http://127.0.0.1:8081/` | 只读诊断 dashboard 和 API 入口。 |
 | `/_ops` | `308 /_ops/` | 规范化 ops URL。 |
 | `/_admin/` | `http://127.0.0.1:8082/` | 默认关闭的管理入口。 |
 | `/_admin` | `308 /_admin/` | 规范化 admin URL。 |
@@ -289,6 +292,32 @@ Nginx 会传递：
 
 Console 代理层还会隐藏 upstream `X-Frame-Options`，并添加 `Content-Security-Policy frame-ancestors`，用于允许 Hugging Face Space 页面通过 iframe 嵌入 Console。这个处理只放在 `/console/`，不要扩展到 S3 API 根路径，避免影响对象访问语义。
 
+## `hfs/ops_service.py`
+
+`hfs/ops_service.py` 是容器内的只读诊断服务，由 `hfs/start.sh` 以 Python 标准库 HTTP server 启动，监听 `127.0.0.1:8081`。外部用户必须通过 Nginx 的 `/_ops/` 前缀访问。
+
+公开路径：
+
+| 外部路径 | 行为 |
+| --- | --- |
+| `/_ops/` | 浏览器默认返回聚合 dashboard；脚本或 `?format=json` 返回 JSON 索引。 |
+| `/_ops/health` | 返回 Nginx S3 health、libreFS S3 health、Console 端口和 ops uptime。 |
+| `/_ops/system` | 返回时间、uptime、load、内存、磁盘和进程数。 |
+| `/_ops/config` | 返回非敏感配置和 Secret presence，不返回 Secret value。 |
+| `/_ops/version` | 返回 libreFS ref/commit、Go/Ubuntu/Python/runtime 信息。 |
+| `/_ops/metrics` | 返回 Prometheus text format。 |
+| `/_ops/healthz` | 免 token 的轻量 liveness endpoint，只证明 ops-service 存活。 |
+
+`/health`、`/system`、`/config`、`/version`、`/metrics` 是 Nginx 剥掉 `/_ops/` 后传给内部 handler 的路径，不是外部 URL。文档和用户说明必须写完整 `/_ops/...`。
+
+ops 鉴权支持三种方式：
+
+- `X-Ops-Token: <token>`
+- `Authorization: Bearer <token>`
+- 浏览器 `HttpOnly` cookie
+
+`/_ops/?token=<ops-token>` 只作为浏览器首次登录或临时调试入口。验证成功后，服务设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转到不带 token 的 URL。后续浏览器点击 dashboard、JSON 索引或各 API endpoint 时复用 cookie；脚本仍应优先使用 header/bearer token。
+
 ## `.dockerignore`
 
 `.dockerignore` 用来减少 Docker build context，避免把本地状态送到 HF 远端 build。
@@ -306,7 +335,7 @@ Console 代理层还会隐藏 upstream `X-Frame-Options`，并添加 `Content-Se
 | `local` | 本地材料目录，不进入 build context。 |
 | `tmp` / `temp` | 临时目录。 |
 
-不要把 `README.md`、`Dockerfile`、`start.sh`、`nginx.conf` 或 `docs/` 加进 `.dockerignore`。其中 `README.md` 是 Space 元数据来源，`Dockerfile`/`start.sh`/`nginx.conf` 是构建和运行必需文件。
+不要把 `README.md`、`Dockerfile`、`hfs/start.sh`、`hfs/nginx.conf` 或 `docs/` 加进 `.dockerignore`。其中 `README.md` 是 Space 元数据来源，`Dockerfile`/`hfs/start.sh`/`hfs/nginx.conf` 是构建和运行必需文件。
 
 ## `.gitignore`
 
@@ -361,14 +390,14 @@ Console 代理层还会隐藏 upstream `X-Frame-Options`，并添加 `Content-Se
 默认检查：
 
 - `git diff --check`。
-- `start.sh` Bash 语法。
-- `ops_service.py` 和 `admin_service.py` Python 语法。
+- `hfs/start.sh` Bash 语法。
+- `hfs/ops_service.py` 和 `hfs/admin_service.py` Python 语法。
 - `README.md` front matter。
 - `Dockerfile` 的 Ubuntu build/runtime、upstream source build、`EXPOSE 7860` 和 healthcheck。
-- `start.sh` 的 Secret 校验、公开 URL 推导、Console redirect URL、ops/admin service 和 Nginx 配置预检。
-- `nginx.conf` 的 `7860` 监听、`/_ops/`、`/_admin/`、`/console/` 子路径、S3 根路径和 iframe header。
+- `hfs/start.sh` 的 Secret 校验、公开 URL 推导、Console redirect URL、ops/admin service 和 Nginx 配置预检。
+- `hfs/nginx.conf` 的 `7860` 监听、`/_ops/`、`/_admin/`、`/console/` 子路径、S3 根路径和 iframe header。
 - `LICENSE` 是否仍是 AGPL-3.0。
-- 如果本机安装了 `nginx`，运行 `nginx -t -c "$PWD/nginx.conf"`。
+- 如果本机安装了 `nginx`，运行 `nginx -t -c "$PWD/hfs/nginx.conf"`。
 
 加上 `--remote` 时，会额外检查公开 health endpoint：
 
@@ -416,7 +445,7 @@ scripts/validate-contract.sh --remote
 - Console `/console/` 是否能加载静态资源。
 - S3 signed request 是否仍可用。
 
-### 改 `start.sh` 后必须验证
+### 改 `hfs/start.sh` 后必须验证
 
 - 缺少 secret 时是否明确失败。
 - `PUBLIC_BASE_URL` / `SPACE_HOST` 推导是否正确。
@@ -425,16 +454,16 @@ scripts/validate-contract.sh --remote
 - `MINIO_BROWSER_REDIRECT_URL` 是否以 `/console/` 结尾，并拒绝其他子路径。
 - libreFS、ops-service、admin-service 和 Nginx 任一退出时容器是否能退出。
 
-### 改 `ops_service.py` 或 `admin_service.py` 后必须验证
+### 改 `hfs/ops_service.py` 或 `hfs/admin_service.py` 后必须验证
 
-- Python 语法：`python3 -m py_compile ops_service.py admin_service.py`。
+- Python 语法：`python3 -m py_compile hfs/ops_service.py hfs/admin_service.py`。
 - `/_ops/config` 仍只返回 Secret 是否存在，不返回 Secret 原文。
 - `/_ops/` 仍然只有只读诊断能力。
 - `/_admin/` 仍然默认关闭；生产开启时必须带 `ADMIN_TOKEN`。
 - 写 action 仍只有白名单，并且 `reload-nginx` 需要 `confirm=true`。
 - `en` / `zh-CN` 文案选择不改变 `error`、action `name`、endpoint path 等机器字段。
 
-### 改 `nginx.conf` 后必须验证
+### 改 `hfs/nginx.conf` 后必须验证
 
 - 根路径仍是 S3 API。
 - `/console` 会跳转到 `/console/`。

@@ -143,7 +143,7 @@ X-Frame-Options: DENY
 
 ### 处理
 
-在 `nginx.conf` 的 Console 代理层隐藏 upstream `X-Frame-Options`，并补充只允许本站和 Hugging Face 页面嵌入的 CSP：
+在 `hfs/nginx.conf` 的 Console 代理层隐藏 upstream `X-Frame-Options`，并补充只允许本站和 Hugging Face 页面嵌入的 CSP：
 
 ```nginx
 location /console/ {

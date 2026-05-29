@@ -1,0 +1,31 @@
+schema_version = 1
+standard = "hfs-dev"
+pattern = "A"
+runtime_mode = "source-fetch"
+space_root_mode = "repo-root"
+hfs_dir = "."
+public_port = 7860
+canonical_health_endpoint = "/minio/health/ready"
+release_pin_required = true
+release_pin_surfaces = [
+  "LIBREFS_REF=<upstream branch or tag>",
+  "LIBREFS_COMMIT=<upstream commit sha>",
+  "GO_VERSION=<go toolchain version>",
+  "UBUNTU_VERSION=<ubuntu base image tag or digest refactor surface>",
+]
+dev_mutable_sources_allowed = [
+  "LIBREFS_REF=master",
+  "LIBREFS_COMMIT=HEAD",
+]
+required_files = [
+  "README.md",
+  "Dockerfile",
+  "hfs/start.sh",
+  "hfs/nginx.conf",
+  "hfs/ops_service.py",
+  "hfs/admin_service.py",
+  "scripts/validate-contract.sh",
+  "scripts/smoke-s3-curl.sh",
+  "docs",
+  "AGENTS.md",
+]
