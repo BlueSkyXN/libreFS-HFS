@@ -316,7 +316,7 @@ ops 鉴权支持三种方式：
 - `Authorization: Bearer <token>`
 - 浏览器 `HttpOnly` cookie
 
-`/_ops/?token=<ops-token>` 只作为浏览器首次登录或临时调试入口。验证成功后，服务设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转到不带 token 的 URL。后续浏览器点击 dashboard、JSON 索引或各 API endpoint 时复用 cookie；脚本仍应优先使用 header/bearer token。
+`/_ops/?token=<ops-token>` 只作为浏览器首次登录入口。验证成功后，服务设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转到不带 token 的 URL。后续浏览器点击 dashboard、JSON 索引或各 API endpoint 时复用 cookie；脚本和 JSON API 请求不接受 query token 鉴权，必须使用 header/bearer token 或浏览器 cookie。
 
 ## `.dockerignore`
 
@@ -484,6 +484,8 @@ scripts/validate-contract.sh --remote
 ```bash
 curl -fsSL https://huggingface.co/api/spaces/BlueSkyXN/libreFS-HFS
 ```
+
+如果匿名 Space API 返回 `401`，改用公开 health endpoint 或已登录 HF CLI 回读状态，不要把匿名 API 失败直接判成 runtime 故障。
 
 健康检查：
 

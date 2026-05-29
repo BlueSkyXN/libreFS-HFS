@@ -133,7 +133,7 @@ Web Console 也是公网可访问，但需要登录。
 
 `/_ops/` 是只读诊断面，使用 `OPS_TOKEN` 保护。它可以返回 dashboard、health、system、config、version 和 metrics，但 `/_ops/config` 只返回 secret 是否存在，不返回 secret 原文。不要把写操作、任意命令、SQL、文件读取或重启能力放进 `/_ops`。
 
-ops 脚本访问应使用 `X-Ops-Token` 或 `Authorization: Bearer <token>`。浏览器首次进入可临时使用 `/_ops/?token=<ops-token>` 或登录表单；验证成功后服务设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转到不带 token 的 URL。`?token=` 不应长期出现在文档、日志、截图或分享链接中。
+ops 脚本访问应使用 `X-Ops-Token` 或 `Authorization: Bearer <token>`。浏览器首次进入可临时使用 `/_ops/?token=<ops-token>` 或登录表单；验证成功后服务设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转到不带 token 的 URL。脚本/API 请求不接受 query token 鉴权，避免 token 长期留在 URL、代理日志或截图中。
 
 `/_admin/` 是独立管理面，代码默认 `ADMIN_ENABLED=false`。开启时必须设置 `ADMIN_TOKEN`，通过独立 header 或 bearer token 鉴权；代码不强制 `ADMIN_TOKEN` 和 `OPS_TOKEN` 的值不同。当前生产环境已显式设置 `ADMIN_ENABLED=true`。当前白名单 action 只有 `run-health-checks` 和 `reload-nginx`，其中 `reload-nginx` 需要 `confirm=true` 并写入 `/data/logs/admin-audit.jsonl`。当前版本不提供 Web terminal、file manager、bucket/policy/root credential 管理或 `librefs` restart。
 

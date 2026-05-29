@@ -89,13 +89,27 @@ hf spaces variables list BlueSkyXN/libreFS-HFS
 No results found.
 ```
 
-当前生产环境最近回读为：
+当前生产环境最近回读为 2026-05-29 快照：
 
 ```text
 ADMIN_ENABLED=true
+PUBLIC_BASE_URL=https://blueskyxn-librefs-hfs.hf.space
+MINIO_SERVER_URL=https://blueskyxn-librefs-hfs.hf.space
+MINIO_BROWSER_REDIRECT_URL=https://blueskyxn-librefs-hfs.hf.space/console/
+GO_VERSION=1.26.3
+LIBREFS_REF=master
+LIBREFS_COMMIT=e194bd779f36fdc08f310d2819d9356f0c1f991b
+MINIO_SITE_NAME=librefs-hfs
+MINIO_SITE_REGION=us-east-1
+MINIO_BROWSER=on
+MINIO_BROWSER_REDIRECT=on
+MINIO_UPDATE=off
+MINIO_CALLHOME_ENABLE=off
+MINIO_API_ROOT_ACCESS=on
+MINIO_API_CORS_ALLOW_ORIGIN=*
 ```
 
-如果只做临时排障，排障结束后建议关闭或移除 `ADMIN_ENABLED`，让 `/_admin/` 回到代码默认关闭状态。
+其中 `LIBREFS_COMMIT` 是有效的发布态 upstream commit pin；`GO_VERSION`、`LIBREFS_REF` 和若干 MinIO 变量与当前默认值重复，属于后续可清理的配置噪音。清理 Variables 会改变线上配置，应作为单独 live operation 执行。如果只做临时排障，排障结束后建议关闭或移除 `ADMIN_ENABLED`，让 `/_admin/` 回到代码默认关闭状态。
 
 本地可以维护 `.env.local` 记录真实 secret 值、当前 host、Storage Bucket、默认值说明和临时覆盖候选。`.env.local` 必须被 Git ignore，不应提交。
 
@@ -153,6 +167,8 @@ git ls-remote hf HEAD refs/heads/main
 curl -fsSL https://huggingface.co/api/spaces/BlueSkyXN/libreFS-HFS \
   | jq '{sha, stage: .runtime.stage, error: .runtime.errorMessage, host}'
 ```
+
+如果匿名 Space API 返回 `401`，先用 health endpoint、`hf spaces logs` 和 HF Variables/Secrets/Volume CLI 回读确认状态；不要把匿名 API 失败当成 runtime 故障。
 
 常见 stage：
 

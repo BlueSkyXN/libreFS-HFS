@@ -12,24 +12,23 @@ Console:
 https://blueskyxn-librefs-hfs.hf.space/console/
 ```
 
-最近生产回读时间：2026-05-20。实时状态以本页命令重新查询为准；`origin/main`、`hf/main` 和 Space runtime sha 都不在文档中硬编码，避免文档在合并或推送后立即过期。
+最近生产回读时间：2026-05-29。实时状态以本页命令重新查询为准；`origin/main`、`hf/main` 和 Space runtime sha 都可能在合并或推送后立即过期。
 
 ## 检查 Space 状态
 
 ```bash
-curl -fsSL https://huggingface.co/api/spaces/BlueSkyXN/libreFS-HFS \
-  | jq '{sha, stage: .runtime.stage, error: .runtime.errorMessage, host}'
+curl -fsS https://blueskyxn-librefs-hfs.hf.space/minio/health/ready \
+  -o /dev/null \
+  -w 'health_http=%{http_code}\n'
 ```
 
 健康状态应类似：
 
-```json
-{
-  "stage": "RUNNING",
-  "error": null,
-  "host": "https://blueskyxn-librefs-hfs.hf.space"
-}
+```text
+health_http=200
 ```
+
+Hugging Face Space API 如果返回 `401`，说明当前访问方式需要认证；不要把匿名 API 失败直接解释成 Space 不可用。可改用已登录的 HF CLI 查看日志和 Variables/Secrets/Volume。
 
 ## 健康检查
 
@@ -85,7 +84,7 @@ https://blueskyxn-librefs-hfs.hf.space/_ops/
 https://blueskyxn-librefs-hfs.hf.space/_ops/?token=<ops-token>
 ```
 
-token 验证成功后，服务会设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转回不带 token 的 `/_ops/`。后续浏览器打开 `/_ops/health`、`/_ops/system`、`/_ops/config`、`/_ops/version` 或 `/_ops/metrics` 会复用 cookie 登录态。退出登录使用：
+token 验证成功后，服务会设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转回不带 token 的 `/_ops/`。后续浏览器打开 `/_ops/health`、`/_ops/system`、`/_ops/config`、`/_ops/version` 或 `/_ops/metrics` 会复用 cookie 登录态。脚本/API 请求不接受 query token 鉴权，必须使用 header、bearer token 或浏览器 cookie。退出登录使用：
 
 ```text
 https://blueskyxn-librefs-hfs.hf.space/_ops/logout
@@ -346,10 +345,26 @@ HF Secrets:
 
 HF Variables:
 - ADMIN_ENABLED=true
+- PUBLIC_BASE_URL=https://blueskyxn-librefs-hfs.hf.space
+- MINIO_SERVER_URL=https://blueskyxn-librefs-hfs.hf.space
+- MINIO_BROWSER_REDIRECT_URL=https://blueskyxn-librefs-hfs.hf.space/console/
+- GO_VERSION=1.26.3
+- LIBREFS_REF=master
+- LIBREFS_COMMIT=e194bd779f36fdc08f310d2819d9356f0c1f991b
+- MINIO_SITE_NAME=librefs-hfs
+- MINIO_SITE_REGION=us-east-1
+- MINIO_BROWSER=on
+- MINIO_BROWSER_REDIRECT=on
+- MINIO_UPDATE=off
+- MINIO_CALLHOME_ENABLE=off
+- MINIO_API_ROOT_ACCESS=on
+- MINIO_API_CORS_ALLOW_ORIGIN=*
 
 HF Volume:
 - BlueSkyXN/libreFS-HFS-storage -> /data
 ```
+
+`LIBREFS_COMMIT` 是有效的 release pin；`GO_VERSION`、`LIBREFS_REF` 和若干 MinIO 变量与当前默认值重复，属于后续可清理的配置噪音。清理 Variables 会改变线上配置，应作为单独 live operation 执行。
 
 维护原则：
 
@@ -375,7 +390,7 @@ secrets: MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, OPS_TOKEN
 volume: BlueSkyXN/libreFS-HFS-storage -> /data
 ```
 
-当前生产启用了 admin，因此 `variables` 不应为空，`secrets` 也应包含 `ADMIN_TOKEN`。HF CLI 不回显 Secret value，只能回读 key；需要确认 value 是否同步时，用本地 `.env.local` 的 token 调线上 `/_ops/` 或 `/_admin/` 验证。
+当前生产启用了 admin，并且当前回读到一个具体 `LIBREFS_COMMIT` 发布 pin，因此 `variables` 不应为空，`secrets` 也应包含 `ADMIN_TOKEN`。HF CLI 不回显 Secret value，只能回读 key；需要确认 value 是否同步时，用本地 `.env.local` 的 token 调线上 `/_ops/` 或 `/_admin/` 验证。
 
 ## 持久化检查
 
@@ -429,6 +444,8 @@ curl -fsS https://blueskyxn-librefs-hfs.hf.space/minio/health/ready \
   -o /dev/null \
   -w 'health_http=%{http_code}\n'
 ```
+
+如果 Space API 对当前网络返回 `401`，先用 health endpoint、`hf spaces logs` 和 HF Variables/Secrets/Volume CLI 回读确认状态；不要把匿名 API 失败当成 runtime 故障。
 
 然后打开：
 

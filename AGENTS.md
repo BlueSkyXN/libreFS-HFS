@@ -70,7 +70,7 @@ Rules:
 - 远端健康：`scripts/validate-contract.sh --remote` 或 `curl -fsS https://blueskyxn-librefs-hfs.hf.space/minio/health/ready -o /dev/null -w 'health_http=%{http_code}\n'`；需要网络，不读取 Secret。
 - 凭证型 S3 smoke：`MINIO_ROOT_USER=... MINIO_ROOT_PASSWORD=... scripts/smoke-s3-curl.sh`。会创建/清理临时 bucket/object，只在用户明确要求线上验收时运行。
 - Nginx 语法：`mkdir -p /tmp/nginx/client_body /tmp/nginx/proxy /tmp/nginx/fastcgi /tmp/nginx/uwsgi /tmp/nginx/scgi && nginx -t -c "$PWD/hfs/nginx.conf"`。
-- Space 状态/日志：`curl -fsSL https://huggingface.co/api/spaces/BlueSkyXN/libreFS-HFS`、`hf spaces logs BlueSkyXN/libreFS-HFS --build --tail 200`、`hf spaces logs BlueSkyXN/libreFS-HFS --tail 200`。
+- Space 状态/日志：`curl -fsSL https://huggingface.co/api/spaces/BlueSkyXN/libreFS-HFS`、`hf spaces logs BlueSkyXN/libreFS-HFS --build --tail 200`、`hf spaces logs BlueSkyXN/libreFS-HFS --tail 200`。如果匿名 Space API 返回 `401`，用 health endpoint 和已登录 HF CLI 回读状态，不要直接判为 runtime 故障。
 - 远端 Git/HF 配置回读：`git ls-remote hf HEAD refs/heads/main`、`hf spaces variables list BlueSkyXN/libreFS-HFS`、`hf spaces secrets list BlueSkyXN/libreFS-HFS`、`hf spaces volumes list BlueSkyXN/libreFS-HFS`。HF Secrets 只显示 key，不显示 value。
 - Console/ops/admin smoke：按需检查 `/console/` header、Console JS/CSS MIME、`/_ops/` dashboard、`/_ops/health`、`/_admin/api/status`。ops 脚本请求需要 `X-Ops-Token` 或 bearer token；网页登录可用 `?token=` 首次引导到 HttpOnly cookie；admin 需要 `X-Admin-Token`；admin 生产是否开启必须先回读 HF Variables。
 
@@ -95,7 +95,7 @@ Rules:
 - 避免建议或创建名为 `console`、`minio`、`_ops`、`_admin` 的公开 bucket，因为这些路径与 Console、健康检查、ops 和 admin 路由冲突。
 - `/_ops/` 是只读诊断面和浏览器 dashboard，默认使用 `OPS_TOKEN` 保护；不能新增写操作、任意命令、任意文件读取、SQL、restart 或 secret 原文返回。
 - 公开 ops API 路径必须带 `/_ops/` 前缀：`/_ops/health`、`/_ops/system`、`/_ops/config`、`/_ops/version`、`/_ops/metrics`。裸 `/health` 等只是在 Nginx 剥掉 `/_ops/` 后的内部 handler path，不要写成外部 URL。
-- `/_ops/?token=...` 只作为临时浏览器登录/bootstrap 入口；验证成功后应设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie 并跳转到无 token URL。脚本和自动化仍优先用 `X-Ops-Token` 或 `Authorization: Bearer <token>`，不要在文档、日志、截图或分享链接里长期保留 query token。
+- `/_ops/?token=...` 只作为临时浏览器登录/bootstrap 入口；验证成功后应设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie 并跳转到无 token URL。脚本和 JSON API 请求不接受 query token 鉴权，必须使用 `X-Ops-Token`、`Authorization: Bearer <token>` 或浏览器 cookie；不要在文档、日志、截图或分享链接里长期保留 query token。
 - `/_ops/healthz` 是免 token 的内部轻量 liveness endpoint，只能返回 ops 服务存活状态；不能扩展成 system/config/version/metrics 信息。
 - `/_admin/` 是独立管理面，代码默认 `ADMIN_ENABLED=false`；开启时必须设置 `ADMIN_TOKEN`。`ADMIN_TOKEN` 是独立配置键和 header，代码不强制它与 `OPS_TOKEN` 的值不同；不要在未回读 `.env.local` 或 HF Secret key 状态时猜测线上 token。
 - 当前 admin 第一版只允许 `run-health-checks` 和 `reload-nginx`；`reload-nginx` 必须显式 `confirm=true` 并写审计日志。不要新增 Web terminal、file manager、bucket/policy/root credential 管理或 `librefs` restart，除非用户明确要求并重新评估生命周期。
@@ -160,7 +160,7 @@ Rules:
 
 - 保持只读边界；`/_ops/config` 只返回 secret presence，不返回任何 secret value。
 - 外部可见 API 路径必须保持 `/_ops/health`、`/_ops/system`、`/_ops/config`、`/_ops/version`、`/_ops/metrics`；根 `/_ops/` 面向浏览器返回聚合 dashboard，脚本或 `?format=json` 可拿 JSON 索引。
-- 保持三类 ops 鉴权兼容：`X-Ops-Token`、`Authorization: Bearer <token>`、浏览器 HttpOnly cookie。`?token=` 只用于首次网页登录和临时调试，成功后要清理 URL。
+- 保持三类 ops 鉴权兼容：`X-Ops-Token`、`Authorization: Bearer <token>`、浏览器 HttpOnly cookie。`?token=` 只用于首次网页登录 bootstrap，成功后要清理 URL；不要让 query token 成为脚本/API 鉴权方式。
 - 语言选择逻辑必须和 `hfs/admin_service.py` 保持一致：`?lang=`、`X-Control-Language`、`Accept-Language`、`CONTROL_PLANE_DEFAULT_LANG`。
 - 新增 payload 字段时区分稳定机器字段和本地化文案字段，避免管理脚本依赖中文或英文句子。
 

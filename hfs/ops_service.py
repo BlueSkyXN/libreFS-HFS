@@ -34,8 +34,8 @@ MESSAGES = {
         "zh-CN": "需要认证。",
     },
     "auth_hint": {
-        "en": "Send X-Ops-Token, Authorization: Bearer <token>, or ?token=<token>.",
-        "zh-CN": "请发送 X-Ops-Token、Authorization: Bearer <token>，或临时使用 ?token=<token>。",
+        "en": "Send X-Ops-Token or Authorization: Bearer <token>. Browser login may bootstrap at /_ops/?token=<token>.",
+        "zh-CN": "请发送 X-Ops-Token 或 Authorization: Bearer <token>。浏览器登录可临时使用 /_ops/?token=<token> 引导。",
     },
     "not_found": {
         "en": "The requested ops endpoint was not found.",
@@ -817,7 +817,7 @@ def render_login_page(language: str, error: str = "") -> str:
             "token": "OPS_TOKEN",
             "submit": "登录",
             "error": "Token 不正确。",
-            "hint": "也仍然兼容临时 URL：/_ops/?token=<ops-token>。",
+            "hint": "浏览器登录仍然兼容临时 URL：/_ops/?token=<ops-token>。",
         },
         "en": {
             "title": "Ops login",
@@ -826,7 +826,7 @@ def render_login_page(language: str, error: str = "") -> str:
             "token": "OPS_TOKEN",
             "submit": "Log in",
             "error": "The token is not correct.",
-            "hint": "Temporary URL login is still supported: /_ops/?token=<ops-token>.",
+            "hint": "Temporary browser login is still supported: /_ops/?token=<ops-token>.",
         },
     }.get(language, {})
     error_html = f"<p class=\"error\">{html.escape(labels['error'])}</p>" if error else ""
@@ -967,7 +967,6 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_query_token_cookie()
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -977,7 +976,6 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
-        self.send_query_token_cookie()
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -1000,11 +998,6 @@ class Handler(BaseHTTPRequestHandler):
         jar[OPS_COOKIE_NAME]["samesite"] = "Lax"
         jar[OPS_COOKIE_NAME]["max-age"] = 0
         self.send_header("Set-Cookie", jar[OPS_COOKIE_NAME].OutputString())
-
-    def send_query_token_cookie(self) -> None:
-        token = self.query_token()
-        if self.token_valid(token):
-            self.send_ops_cookie(token)
 
     def send_redirect(self, location: str, token: str = "", clear_cookie: bool = False) -> None:
         self.send_response(303)
@@ -1063,7 +1056,6 @@ class Handler(BaseHTTPRequestHandler):
         return [
             self.headers.get("X-Ops-Token", ""),
             self.bearer_token(),
-            self.query_token(),
             self.cookie_token(),
         ]
 
@@ -1126,7 +1118,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         query_token = self.query_token()
-        if query_token and self.token_valid(query_token) and self.wants_html():
+        if path in {"/", ""} and query_token and self.token_valid(query_token) and self.wants_html():
             self.send_redirect(self.external_path_without_token(), token=query_token)
             return
 

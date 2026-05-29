@@ -10,7 +10,7 @@
 - Volume 挂载只证明 `/data` 具备持久化条件；持久化结论必须来自上传、重启、读取、rebuild 后再读取。
 - ops/admin 支持 `en` 和 `zh-CN`；机器字段如 `error`、endpoint path、action `name` 保持稳定，本地化字段是 `message`、`hint`、`label`、`description`、`risk`、`notes`。
 - 公开 ops API 必须写完整 `/_ops/...` 路径；裸 `/health`、`/system`、`/config`、`/version`、`/metrics` 只表示 Nginx 剥前缀后的内部 handler path。
-- `?token=` 只用于 ops 浏览器首次登录或临时调试；文档应优先写 header/bearer 脚本调用，以及成功网页登录后使用 `HttpOnly` cookie 的语义。
+- `?token=` 只用于 ops 浏览器首次登录 bootstrap；文档应优先写 header/bearer 脚本调用，以及成功网页登录后使用 `HttpOnly` cookie 的语义。脚本/API 请求不应把 query token 当作鉴权方式。
 
 ## Local rules
 

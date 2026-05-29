@@ -91,7 +91,7 @@ HF Volume:
 - BlueSkyXN/libreFS-HFS-storage -> /data
 ```
 
-当前生产环境最近回读状态（2026-05-20）：
+当前生产环境最近回读状态（2026-05-29）：
 
 ```text
 HF Secrets:
@@ -102,10 +102,26 @@ HF Secrets:
 
 HF Variables:
 - ADMIN_ENABLED=true
+- PUBLIC_BASE_URL=https://blueskyxn-librefs-hfs.hf.space
+- MINIO_SERVER_URL=https://blueskyxn-librefs-hfs.hf.space
+- MINIO_BROWSER_REDIRECT_URL=https://blueskyxn-librefs-hfs.hf.space/console/
+- GO_VERSION=1.26.3
+- LIBREFS_REF=master
+- LIBREFS_COMMIT=e194bd779f36fdc08f310d2819d9356f0c1f991b
+- MINIO_SITE_NAME=librefs-hfs
+- MINIO_SITE_REGION=us-east-1
+- MINIO_BROWSER=on
+- MINIO_BROWSER_REDIRECT=on
+- MINIO_UPDATE=off
+- MINIO_CALLHOME_ENABLE=off
+- MINIO_API_ROOT_ACCESS=on
+- MINIO_API_CORS_ALLOW_ORIGIN=*
 
 HF Volume:
 - BlueSkyXN/libreFS-HFS-storage -> /data
 ```
+
+其中 `LIBREFS_COMMIT` 已经提供发布态 upstream commit pin；`GO_VERSION`、`LIBREFS_REF` 和若干 MinIO 变量与当前默认值重复，属于后续可以清理的配置噪音。清理 HF Variables 是 live operation，不应在普通文档或代码审查中自动执行。
 
 默认值维护规则：
 
@@ -233,7 +249,7 @@ curl -H "X-Ops-Token: $OPS_TOKEN" https://your-space.hf.space/_ops/health
 curl -H "Authorization: Bearer $OPS_TOKEN" https://your-space.hf.space/_ops/health
 ```
 
-浏览器也支持表单登录和临时 query token 引导。`/_ops/?token=<ops-token>` 验证成功后会设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转到不带 token 的 `/_ops/`。后续浏览器打开 `/_ops/health`、`/_ops/system` 等路径时依赖 cookie 登录态，不需要继续把 token 放在 URL 里。
+浏览器也支持表单登录和临时 query token 引导。浏览器 HTML 请求访问 `/_ops/?token=<ops-token>` 验证成功后会设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转到不带 token 的 `/_ops/`。后续浏览器打开 `/_ops/health`、`/_ops/system` 等路径时依赖 cookie 登录态，不需要继续把 token 放在 URL 里。脚本或 JSON API 请求不接受 query token 鉴权，必须使用 header、bearer token 或浏览器 cookie。
 
 `?token=` 只适合首次网页登录或临时浏览器调试，不建议写进文档、脚本、截图或分享链接。脚本和自动化应优先使用 `X-Ops-Token` 或 `Authorization: Bearer <token>`。
 

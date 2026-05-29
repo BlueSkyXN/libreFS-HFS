@@ -2,16 +2,16 @@
 
 本文档把当前代码事实、生产回读状态和文档维护口径放在同一处，用于减少文档漂移。修改代码或远端配置后，先更新这里，再同步其他文档。
 
-最后核对时间：2026-05-20。
+最后核对时间：2026-05-29。
 
 ## 当前生产回读
 
 | 项目 | 当前状态 | 证据命令 |
 | --- | --- | --- |
-| GitHub `origin/main` | 用命令回读最新 head。 | `git ls-remote --heads origin main` |
-| Hugging Face `hf/main` | 用命令回读最新 head。 | `git ls-remote --heads hf main` |
-| Space runtime | 应为 `RUNNING`；runtime sha 必须用命令回读，不在文档中硬编码。 | `curl -fsSL https://huggingface.co/api/spaces/BlueSkyXN/libreFS-HFS` |
-| HF Variables | `ADMIN_ENABLED=true` | `hf spaces variables list BlueSkyXN/libreFS-HFS` |
+| GitHub `origin/main` | `b498d4effbfc02d7e95f77a8f98bb3a790df9f00` | `git ls-remote origin HEAD refs/heads/main` |
+| Hugging Face `hf/main` | `007485be905313ddc426c86fbd4322c80bb87797`；GitHub main 已领先，尚未推送到 HF 部署仓。 | `git ls-remote hf HEAD refs/heads/main` |
+| Space health | `/minio/health/ready` 回读 `HTTP 200`；Space API 可能需要认证，不能只依赖匿名 `curl`。 | `curl -fsS https://blueskyxn-librefs-hfs.hf.space/minio/health/ready -o /dev/null -w 'health_http=%{http_code}\n'` |
+| HF Variables | 当前显式配置：`ADMIN_ENABLED=true`、`PUBLIC_BASE_URL`、`MINIO_SERVER_URL`、`MINIO_BROWSER_REDIRECT_URL`、`GO_VERSION=1.26.3`、`LIBREFS_REF=master`、`LIBREFS_COMMIT=e194bd779f36fdc08f310d2819d9356f0c1f991b`、`MINIO_SITE_NAME`、`MINIO_SITE_REGION`、`MINIO_BROWSER`、`MINIO_BROWSER_REDIRECT`、`MINIO_UPDATE`、`MINIO_CALLHOME_ENABLE`、`MINIO_API_ROOT_ACCESS`、`MINIO_API_CORS_ALLOW_ORIGIN`。其中多项与代码默认或 upstream 默认值重复，属于可后续清理的配置噪音。 | `hf spaces variables list BlueSkyXN/libreFS-HFS` |
 | HF Secrets | `MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`、`OPS_TOKEN`、`ADMIN_TOKEN` 已存在；HF 不回显 value。 | `hf spaces secrets list BlueSkyXN/libreFS-HFS` |
 | HF Volume | `bucket BlueSkyXN/libreFS-HFS-storage -> /data`，`read_only=False` | `hf spaces volumes list BlueSkyXN/libreFS-HFS` |
 
@@ -43,7 +43,7 @@
 | Console 子路径 | `location /console/` 使用 `proxy_pass http://127.0.0.1:9001/;` 剥掉 `/console/` 前缀 | `hfs/nginx.conf` | `docs/architecture.md`, `docs/source-walkthrough.md`, `docs/troubleshooting.md` |
 | Console iframe | 只在 `/console/` 隐藏 upstream `X-Frame-Options` 并补 `Content-Security-Policy frame-ancestors` | `hfs/nginx.conf` | `docs/architecture.md`, `docs/configuration.md`, `docs/operations.md`, `docs/troubleshooting.md` |
 | Ops endpoints | 外部路径为 `GET /_ops/` dashboard、`/_ops/health`、`/_ops/system`、`/_ops/config`、`/_ops/version`、`/_ops/metrics`；Nginx 转发后内部 handler 才是 `/health` 等短路径；`/_ops/healthz` 免 token 只用于轻量存活检查 | `hfs/nginx.conf`, `hfs/ops_service.py` | `README.md`, `docs/architecture.md`, `docs/configuration.md`, `docs/operations.md`, `docs/source-walkthrough.md` |
-| Ops 安全边界 | 只读；`/_ops/config` 只返回 Secret 是否存在，不返回 value；`?token=` 只作为浏览器首次登录/bootstrap，成功后用 `HttpOnly` cookie；脚本仍优先用 `X-Ops-Token` 或 bearer token | `hfs/ops_service.py` | `README.md`, `docs/architecture.md`, `docs/configuration.md`, `docs/operations.md` |
+| Ops 安全边界 | 只读；`/_ops/config` 只返回 Secret 是否存在，不返回 value；`?token=` 只作为浏览器首次登录/bootstrap，成功后用 `HttpOnly` cookie；脚本和 JSON API 请求不接受 query token 鉴权，必须用 `X-Ops-Token`、bearer token 或浏览器 cookie | `hfs/ops_service.py` | `README.md`, `docs/architecture.md`, `docs/configuration.md`, `docs/operations.md` |
 | Admin endpoints | `GET /api/status`、`GET /api/actions`、`POST /api/actions/run-health-checks`、`POST /api/actions/reload-nginx` | `hfs/admin_service.py` | `docs/configuration.md`, `docs/operations.md`, `docs/source-walkthrough.md` |
 | Admin 写操作 | `reload-nginx` 是写 action，必须 JSON body `{"confirm": true}`，并写审计日志 | `hfs/admin_service.py` | `docs/architecture.md`, `docs/configuration.md`, `docs/operations.md` |
 | Admin 非目标 | 没有 Web terminal、file manager、bucket/policy/root credential 管理或 `librefs` restart | `hfs/admin_service.py`, 当前路由 | `README.md`, `docs/architecture.md`, `docs/configuration.md`, `docs/usage.md`, `docs/operations.md` |

@@ -123,8 +123,14 @@ require_pattern hfs/nginx.conf 'frame-ancestors.*huggingface\.co' 'Console CSP m
 
 check "ops/admin service contract" require_pattern hfs/ops_service.py 'SECRET_KEYS' 'ops service must summarize secret presence only'
 require_pattern hfs/ops_service.py 'secret values are intentionally omitted' 'ops config must not return raw secrets'
+require_pattern hfs/ops_service.py 'path in \{"/", ""\}.*query_token.*wants_html' 'query token must only bootstrap browser login at /_ops/'
 require_pattern hfs/admin_service.py 'ADMIN_ENABLED.*false' 'admin service must default to disabled'
 require_pattern hfs/admin_service.py 'confirm=true is required' 'admin write action must require explicit confirm'
+
+if sed -n '/def request_tokens/,/def request_token/p' hfs/ops_service.py | grep -q 'query_token'; then
+  echo "Contract check failed: query token must not be accepted as script/API authentication" >&2
+  exit 1
+fi
 
 if grep -Eq 'listen +(9000|9001);' hfs/nginx.conf; then
   echo "Contract check failed: hfs/nginx.conf must not expose internal ports 9000/9001" >&2
