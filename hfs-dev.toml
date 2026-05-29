@@ -8,14 +8,15 @@ public_port = 7860
 canonical_health_endpoint = "/minio/health/ready"
 release_pin_required = true
 release_pin_surfaces = [
-  "LIBREFS_REF=<upstream branch or tag>",
   "LIBREFS_COMMIT=<upstream commit sha>",
-  "GO_VERSION=<go toolchain version>",
-  "UBUNTU_VERSION=<ubuntu base image tag or digest refactor surface>",
 ]
 dev_mutable_sources_allowed = [
   "LIBREFS_REF=master",
   "LIBREFS_COMMIT=HEAD",
+]
+release_hardening_backlog = [
+  "GO_TARBALL_SHA256=<sha256> before enforcing Go tarball checksum verification",
+  "UBUNTU_BASE_IMAGE=ubuntu:24.04@sha256:<digest> before enforcing base image digest pinning",
 ]
 required_files = [
   "README.md",

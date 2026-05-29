@@ -52,7 +52,7 @@
 | `MINIO_BROWSER_REDIRECT_URL` | `HF` | `V` | 按需 | `${MINIO_SERVER_URL}/console/`。 | `${MINIO_SERVER_URL}/console/`。 | 告诉 libreFS Web Console 的公开访问地址。 | 必须落在 `/console/` 子路径，末尾 `/` 应保留。 |
 | `GO_VERSION` | `HF` | `V` | 按需 | `1.26.3`。 | `1.26.3` 或上游明确要求的版本。 | 控制 Docker build 阶段下载的 Go 版本。 | 一般使用 `Dockerfile` 默认值；改动后需要 rebuild。 |
 | `LIBREFS_REF` | `HF` | `V` | 按需 | `master`。 | `master`、tag 或明确 branch。 | 控制 Docker build 从上游 libreFS 拉取哪个 branch 或 tag。 | 上游默认分支是 `master`，不要未经确认改成 `main`。 |
-| `LIBREFS_COMMIT` | `HF` | `V` | 按需 | `HEAD`。 | `HEAD` 或具体 commit SHA。 | 固定上游源码精确提交，避免 rebuild 时静默漂移。 | `HEAD` 表示不固定；具体 SHA 会触发构建期校验。 |
+| `LIBREFS_COMMIT` | `HF` | `V` | 发布态必须 | `HEAD`。 | `HEAD` 或具体 commit SHA。 | 固定上游源码精确提交，避免 rebuild 时静默漂移。 | `HEAD` 只适合开发默认；发布态必须设置具体 SHA，具体 SHA 会触发构建期校验。 |
 | `UBUNTU_VERSION` | `HF` | `V` | 通常不需要 | `24.04`。 | `24.04`。 | 覆盖 builder 和 runtime 使用的 Ubuntu 基础镜像版本。 | 通常写在 `Dockerfile` 默认值里；不要随手改基础镜像。 |
 | `APP_UID` | `HF` | `V` | 通常不需要 | `1000`。 | `1000`。 | 控制容器内 runtime user UID。 | 改动会影响 `/data` 和 `/tmp/nginx` 写权限。 |
 | `APP_GID` | `HF` | `V` | 通常不需要 | `1000`。 | `1000`。 | 控制容器内 runtime group GID。 | 改动会影响 `/data` 和 `/tmp/nginx` 写权限。 |

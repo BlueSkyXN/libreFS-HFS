@@ -73,7 +73,7 @@ license: agpl-3.0
 | `TARGETARCH` | `amd64` | Docker buildx 注入的目标架构。 |
 | `GO_VERSION` | `1.26.3` | builder 阶段下载的 Go 版本。 |
 | `LIBREFS_REF` | `master` | libreFS upstream branch/tag。 |
-| `LIBREFS_COMMIT` | `HEAD` | 可选 commit pin，用于确保源码版本完全固定。 |
+| `LIBREFS_COMMIT` | `HEAD` | 开发默认不 pin；发布态必须设置具体 upstream commit SHA，用于确保源码版本完全固定。 |
 
 ### Builder Stage
 

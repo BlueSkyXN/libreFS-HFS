@@ -412,7 +412,7 @@ hf spaces volumes list BlueSkyXN/libreFS-HFS
 | --- | --- | --- | --- |
 | 未挂载持久化 storage | 对象可能丢失 | 当前 `hf spaces volumes list` 显示已挂载 `/data` bucket | 如发现 volume 缺失，先停止写入并恢复挂载。 |
 | HF Space sleep/restart | 可能短时不可用 | 预期行为 | 作为轻量服务使用。 |
-| libreFS 上游 `master` 变化 | rebuild 行为可能变化 | 部分受控 | 需要稳定时设置 `LIBREFS_COMMIT`。 |
+| libreFS 上游 `master` 变化 | rebuild 行为可能变化 | 部分受控 | 发布态必须设置具体 `LIBREFS_COMMIT=<upstream commit sha>`；`master + HEAD` 只算开发默认。 |
 | Console 子路径回归 | Console 页面空白 | 当前已修复 | 检查 JS/CSS MIME 和登录页。 |
 | bucket policy 配错 | 私有对象被公开 | 用户侧风险 | 使用最小 policy，设置后复查。 |
 | `cpu-basic` 资源限制 | 上传/下载慢，吞吐低 | 预期行为 | 重负载时升级硬件并压测。 |

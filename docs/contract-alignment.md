@@ -27,7 +27,8 @@
 | 外部端口 | 只暴露 `7860` | `Dockerfile` `EXPOSE 7860`，`hfs/nginx.conf` `listen 7860` | 全部 endpoint/port 文档 |
 | 构建策略 | Ubuntu builder/runtime，从 `https://github.com/libreFS/libreFS.git` 拉源码编译，不使用官方 image | `Dockerfile` | `README.md`, `docs/architecture.md`, `docs/source-walkthrough.md` |
 | Go 版本 | `GO_VERSION=1.26.3` | `Dockerfile` | `docs/configuration.md`, `docs/source-walkthrough.md`, `docs/deployment-huggingface.md` |
-| libreFS ref | `LIBREFS_REF=master`，`LIBREFS_COMMIT=HEAD` | `Dockerfile` | `docs/configuration.md`, `docs/troubleshooting.md`, `docs/development-plan.md` |
+| libreFS ref | 开发默认是 `LIBREFS_REF=master`、`LIBREFS_COMMIT=HEAD`；发布态必须设置具体 `LIBREFS_COMMIT=<upstream commit sha>` | `Dockerfile`, `hfs-dev.toml` | `docs/configuration.md`, `docs/troubleshooting.md`, `docs/development-plan.md` |
+| Release hardening | 当前 release pin surface 只计入 upstream commit SHA；Go tarball checksum 和 Ubuntu base image digest 是后续 hardening backlog，不改当前 runtime | `hfs-dev.toml`, `Dockerfile` | `docs/configuration.md`, `docs/development-plan.md` |
 | Runtime packages | `bash`、`ca-certificates`、`curl`、`nginx`、`python3`、`tini` | `Dockerfile` | `docs/architecture.md`, `docs/source-walkthrough.md` |
 | Runtime user | UID/GID `1000`，存在则复用，不无条件创建 | `Dockerfile` | `docs/source-walkthrough.md`, `docs/troubleshooting.md` |
 | 必需启动 Secrets | 只有 `MINIO_ROOT_USER` 和 `MINIO_ROOT_PASSWORD` 缺失会让 `hfs/start.sh` 立即退出 | `hfs/start.sh` | `docs/configuration.md`, `docs/deployment-huggingface.md`, `docs/troubleshooting.md` |

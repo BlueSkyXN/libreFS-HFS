@@ -29,8 +29,8 @@ license: agpl-3.0
 | `APP_GID` | `1000` | runtime group id。 |
 | `TARGETARCH` | `amd64` | 构建架构，通常由 Docker BuildKit 注入。 |
 | `GO_VERSION` | `1.26.3` | 从 `go.dev` 下载的 Go 版本。 |
-| `LIBREFS_REF` | `master` | 从 libreFS 上游拉取的 branch 或 tag。 |
-| `LIBREFS_COMMIT` | `HEAD` | 可选精确 commit 校验。 |
+| `LIBREFS_REF` | `master` | 从 libreFS 上游拉取的 branch 或 tag；开发默认会跟随 upstream 移动。 |
+| `LIBREFS_COMMIT` | `HEAD` | 可选精确 commit 校验；发布态必须设置为具体 upstream commit SHA。 |
 
 当前 libreFS 上游默认分支是 `master`，不是 `main`。如果设置成 `main`，build 会报：
 
@@ -57,12 +57,18 @@ fatal: couldn't find remote ref main
 | --- | --- | --- | --- |
 | `PUBLIC_BASE_URL` | 否 | `https://${SPACE_HOST}` | 只有使用自定义域名或需要临时覆盖公开根 URL 时设置。 |
 | `LIBREFS_REF` | 否 | `master` | 只有要临时切 upstream branch/tag 时设置。 |
-| `LIBREFS_COMMIT` | 否 | `HEAD` | 只有要在 HF Variables 层做精确 commit pin 时设置；长期 pin 更适合写进 `Dockerfile` 默认值。 |
+| `LIBREFS_COMMIT` | 否 | `HEAD` | 发布态必须设置为具体 upstream commit SHA；长期 pin 更适合写进 `Dockerfile` 默认值。 |
 | `GO_VERSION` | 否 | `1.26.3` | 只有 upstream 明确要求更换 Go 版本时设置。 |
 | `ADMIN_ENABLED` | 否 | `false` | 只有明确需要打开 `/_admin/` 时设置为 `true`。 |
 | `CONTROL_PLANE_DEFAULT_LANG` | 否 | `en` | 只有需要改变 `/_ops/` 和 `/_admin/` JSON 文案默认语言时设置；支持 `en`、`zh-CN`。 |
 
 Docker Space 会把 Space Variables 作为 build-time `ARG` 传给 Docker build，也会在 runtime 注入为环境变量。因此 `GO_VERSION`、`LIBREFS_REF` 和 `LIBREFS_COMMIT` 可以通过 Space Variables 覆盖 Dockerfile 默认值。
+
+Release reproducibility 口径：
+
+- `LIBREFS_REF=master` + `LIBREFS_COMMIT=HEAD` 是开发默认值，不是 release pin。
+- 发布态必须提供具体 `LIBREFS_COMMIT=<upstream commit sha>`，Docker build 会校验实际 checkout 的 `git rev-parse HEAD` 是否一致。
+- 当前不改 runtime；Go tarball checksum 校验和 Ubuntu base image digest pin 属于后续 release hardening，不在本轮轻量对齐中引入。
 
 Hugging Face runtime 会提供 `SPACE_HOST`。当前 Space 的公开 host 是：
 
