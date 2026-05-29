@@ -71,13 +71,20 @@ require_pattern README.md '^app_port: 7860$' 'README.md must keep app_port: 7860
 require_pattern README.md '^license: agpl-3.0$' 'README.md must keep license: agpl-3.0'
 
 check "HFS alignment manifest" test -f hfs-dev.toml
+require_pattern hfs-dev.toml '^schema_version = 2$' 'alignment manifest must use structured v2 release pins'
 require_pattern hfs-dev.toml '^standard = "hfs-dev"$' 'alignment manifest must identify the hfs-dev standard'
 require_pattern hfs-dev.toml '^pattern = "A"$' 'libreFS-HFS must remain a Pattern A port repository'
 require_pattern hfs-dev.toml '^runtime_mode = "source-fetch"$' 'libreFS-HFS build fetches upstream libreFS source'
 require_pattern hfs-dev.toml '^space_root_mode = "repo-root"$' 'Pattern A Space root must remain the repository root'
 require_pattern hfs-dev.toml '^release_pin_required = true$' 'release builds must expose immutable pin surfaces'
 require_pattern hfs-dev.toml 'hfs/start\.sh' 'runtime glue manifest must include hfs/start.sh'
-require_pattern hfs-dev.toml 'LIBREFS_COMMIT=<upstream commit sha>' 'release pin surface must include upstream commit SHA'
+require_pattern hfs-dev.toml '^\[\[release_pins\]\]$' 'release pins must use structured v2 tables'
+require_pattern hfs-dev.toml '^name = "LIBREFS_COMMIT"$' 'release pin must include LIBREFS_COMMIT'
+require_pattern hfs-dev.toml '^required_for_release = true$' 'LIBREFS_COMMIT must be required for release builds'
+require_pattern hfs-dev.toml '^release_requires_commit_sha = true$' 'source-fetch release pin must require an upstream commit SHA'
+require_pattern hfs-dev.toml '^name = "LIBREFS_REF"$' 'development mutable source must be documented separately from the release pin'
+require_pattern hfs-dev.toml 'GO_TARBALL_SHA256' 'Go tarball checksum hardening backlog must remain visible'
+require_pattern hfs-dev.toml 'UBUNTU_BASE_IMAGE=.*@sha256' 'Ubuntu base image digest hardening backlog must remain visible'
 
 check "Dockerfile contract" require_pattern Dockerfile '^FROM ubuntu:\$\{UBUNTU_VERSION\} AS builder$' 'builder must stay on Ubuntu'
 require_pattern Dockerfile '^FROM ubuntu:\$\{UBUNTU_VERSION\}$' 'runtime must stay on Ubuntu'
