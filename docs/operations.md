@@ -56,12 +56,12 @@ scripts/validate-contract.sh
 这会检查：
 
 - Markdown 和配置 diff 是否存在 whitespace 或 conflict marker。
-- `start.sh` Bash 语法。
-- `ops_service.py` 和 `admin_service.py` Python 语法。
+- `hfs/start.sh` Bash 语法。
+- `hfs/ops_service.py` 和 `hfs/admin_service.py` Python 语法。
 - `README.md` front matter 是否仍是 Docker Space、`app_port: 7860` 和 AGPL-3.0。
 - `Dockerfile` 是否保持 Ubuntu builder/runtime、远端源码构建和 `7860` healthcheck。
-- `nginx.conf` 是否保持 `/_ops/`、`/_admin/`、`/console/`、S3 根路径、iframe header 和单端口契约。
-- 本机如果安装了 `nginx`，会运行 `nginx -t -c "$PWD/nginx.conf"`。
+- `hfs/nginx.conf` 是否保持 `/_ops/`、`/_admin/`、`/console/`、S3 根路径、iframe header 和单端口契约。
+- 本机如果安装了 `nginx`，会运行 `nginx -t -c "$PWD/hfs/nginx.conf"`。
 
 需要顺手检查公开 health endpoint 时：
 
@@ -72,6 +72,26 @@ scripts/validate-contract.sh --remote
 ## Ops 诊断入口
 
 `/_ops/` 是只读诊断面，默认需要 `OPS_TOKEN`。公开长期运行建议在 HF Secrets 中覆盖默认 demo token。
+
+浏览器聚合面板：
+
+```text
+https://blueskyxn-librefs-hfs.hf.space/_ops/
+```
+
+首次网页登录可以临时打开：
+
+```text
+https://blueskyxn-librefs-hfs.hf.space/_ops/?token=<ops-token>
+```
+
+token 验证成功后，服务会设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转回不带 token 的 `/_ops/`。后续浏览器打开 `/_ops/health`、`/_ops/system`、`/_ops/config`、`/_ops/version` 或 `/_ops/metrics` 会复用 cookie 登录态。退出登录使用：
+
+```text
+https://blueskyxn-librefs-hfs.hf.space/_ops/logout
+```
+
+不要长期使用、记录或分享带 `?token=` 的 URL；token 可能进入浏览器历史、代理日志、截图或聊天记录。脚本和自动化继续使用 header。
 
 常用检查：
 
@@ -87,6 +107,8 @@ curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
 curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
   https://blueskyxn-librefs-hfs.hf.space/_ops/config
 ```
+
+外部 API 必须带 `/_ops/` 前缀；裸 `/health`、`/system`、`/config`、`/version`、`/metrics` 不是公开 URL，只是内部 handler path。
 
 `/_ops/config` 只返回非敏感配置摘要和 Secret 是否存在，不返回 Secret 原文。`/_ops/metrics` 返回 Prometheus text format，但仍需要 token。
 
@@ -390,7 +412,7 @@ hf spaces volumes list BlueSkyXN/libreFS-HFS
 | --- | --- | --- | --- |
 | 未挂载持久化 storage | 对象可能丢失 | 当前 `hf spaces volumes list` 显示已挂载 `/data` bucket | 如发现 volume 缺失，先停止写入并恢复挂载。 |
 | HF Space sleep/restart | 可能短时不可用 | 预期行为 | 作为轻量服务使用。 |
-| libreFS 上游 `master` 变化 | rebuild 行为可能变化 | 部分受控 | 需要稳定时设置 `LIBREFS_COMMIT`。 |
+| libreFS 上游 `master` 变化 | rebuild 行为可能变化 | 部分受控 | 发布态必须设置具体 `LIBREFS_COMMIT=<upstream commit sha>`；`master + HEAD` 只算开发默认。 |
 | Console 子路径回归 | Console 页面空白 | 当前已修复 | 检查 JS/CSS MIME 和登录页。 |
 | bucket policy 配错 | 私有对象被公开 | 用户侧风险 | 使用最小 policy，设置后复查。 |
 | `cpu-basic` 资源限制 | 上传/下载慢，吞吐低 | 预期行为 | 重负载时升级硬件并压测。 |

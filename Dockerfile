@@ -86,10 +86,10 @@ RUN set -eux; \
     chown -R "${APP_UID}:${APP_GID}" /data /tmp/nginx
 
 COPY --from=builder --chmod=0755 /out/librefs /usr/local/bin/librefs
-COPY --chmod=0644 ops_service.py /usr/local/bin/librefs-ops-service.py
-COPY --chmod=0644 admin_service.py /usr/local/bin/librefs-admin-service.py
-COPY --chmod=0644 nginx.conf /etc/nginx/nginx.conf
-COPY --chmod=0755 start.sh /start.sh
+COPY --chmod=0644 hfs/ops_service.py /usr/local/bin/librefs-ops-service.py
+COPY --chmod=0644 hfs/admin_service.py /usr/local/bin/librefs-admin-service.py
+COPY --chmod=0644 hfs/nginx.conf /etc/nginx/nginx.conf
+COPY --chmod=0755 hfs/start.sh /start.sh
 
 ENV HOME=/tmp
 

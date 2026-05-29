@@ -1,0 +1,42 @@
+schema_version = 2
+standard = "hfs-dev"
+pattern = "A"
+runtime_mode = "source-fetch"
+space_root_mode = "repo-root"
+hfs_dir = "."
+public_port = 7860
+canonical_health_endpoint = "/minio/health/ready"
+release_pin_required = true
+release_hardening_backlog = [
+  "GO_TARBALL_SHA256=<sha256> before enforcing Go tarball checksum verification",
+  "UBUNTU_BASE_IMAGE=ubuntu:24.04@sha256:<digest> before enforcing base image digest pinning",
+]
+required_files = [
+  "README.md",
+  "Dockerfile",
+  "hfs/start.sh",
+  "hfs/nginx.conf",
+  "hfs/ops_service.py",
+  "hfs/admin_service.py",
+  "scripts/validate-contract.sh",
+  "scripts/smoke-s3-curl.sh",
+  "docs",
+  "AGENTS.md",
+]
+
+[[release_pins]]
+name = "LIBREFS_COMMIT"
+type = "git_ref"
+source = "Docker build ARG"
+required_for_release = true
+dev_mutable_default_allowed = true
+release_requires_commit_sha = true
+description = "Release builds must set this to a concrete upstream libreFS commit SHA; the Dockerfile development default HEAD is not a release pin."
+
+[[release_pins]]
+name = "LIBREFS_REF"
+type = "git_ref"
+source = "Docker build ARG"
+required_for_release = false
+dev_mutable_default_allowed = true
+description = "Development builds may use the mutable master ref, but release reproducibility is provided by LIBREFS_COMMIT."

@@ -9,6 +9,7 @@
 | [架构说明](architecture.md) | 解释 Docker build、runtime 进程、Nginx 路由和请求流转。 |
 | [Hugging Face 部署指南](deployment-huggingface.md) | 记录 Space 部署、Secrets、Variables、rebuild 和日志查看方法。 |
 | [配置参考](configuration.md) | 汇总 build args、Space Secrets、Space Variables、runtime env、端口和路径。 |
+| [环境变量参考](env-reference.md) | 按平台、V/S/Volume/本地/不配置说明所有 ENV、推荐级别、默认值和建议值。 |
 | [源码逐文件说明](source-walkthrough.md) | 逐项解释仓库文件、运行入口、修改边界和验收命令。 |
 | [使用指南](usage.md) | 说明 Web Console、S3 endpoint、S3 client、公开直链和 bucket policy。 |
 | [运维与验收](operations.md) | 记录健康检查、ops/admin 入口、smoke test、runtime logs、rebuild 检查和运行风险。 |

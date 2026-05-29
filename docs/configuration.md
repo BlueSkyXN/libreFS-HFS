@@ -2,6 +2,8 @@
 
 本文档列出 LibreFS HFS 的 build-time 和 runtime 配置项。
 
+需要逐项查看所有 ENV 的平台、V/S/Volume/本地/不配置分类、推荐级别、默认值和建议值时，见 [环境变量参考](env-reference.md)。
+
 ## Hugging Face Space 元数据
 
 根目录 `README.md` 的 front matter 控制 Space 行为：
@@ -27,8 +29,8 @@ license: agpl-3.0
 | `APP_GID` | `1000` | runtime group id。 |
 | `TARGETARCH` | `amd64` | 构建架构，通常由 Docker BuildKit 注入。 |
 | `GO_VERSION` | `1.26.3` | 从 `go.dev` 下载的 Go 版本。 |
-| `LIBREFS_REF` | `master` | 从 libreFS 上游拉取的 branch 或 tag。 |
-| `LIBREFS_COMMIT` | `HEAD` | 可选精确 commit 校验。 |
+| `LIBREFS_REF` | `master` | 从 libreFS 上游拉取的 branch 或 tag；开发默认会跟随 upstream 移动。 |
+| `LIBREFS_COMMIT` | `HEAD` | 可选精确 commit 校验；发布态必须设置为具体 upstream commit SHA。 |
 
 当前 libreFS 上游默认分支是 `master`，不是 `main`。如果设置成 `main`，build 会报：
 
@@ -40,12 +42,12 @@ fatal: couldn't find remote ref main
 
 | Secret | 必需 | 使用方 | 说明 |
 | --- | --- | --- | --- |
-| `MINIO_ROOT_USER` | 是 | `start.sh`、libreFS | S3 root access key 和 Console 用户名。 |
-| `MINIO_ROOT_PASSWORD` | 是 | `start.sh`、libreFS | S3 root secret key 和 Console 密码。 |
+| `MINIO_ROOT_USER` | 是 | `hfs/start.sh`、libreFS | S3 root access key 和 Console 用户名。 |
+| `MINIO_ROOT_PASSWORD` | 是 | `hfs/start.sh`、libreFS | S3 root secret key 和 Console 密码。 |
 | `OPS_TOKEN` | 建议 | ops-service | `/_ops/` 只读诊断入口 token；默认 demo 值只适合快速测试。 |
 | `ADMIN_TOKEN` | 开启 admin 时 | admin-service | `/_admin/` 独立 Secret/header；`ADMIN_ENABLED=true` 时必须设置。 |
 
-`start.sh` 只会在缺少必需 root Secrets（`MINIO_ROOT_USER` 或 `MINIO_ROOT_PASSWORD`）时直接退出。这是有意设计，用来让错误配置尽早暴露。`OPS_TOKEN` 有代码默认值；`ADMIN_TOKEN` 只有在 `ADMIN_ENABLED=true` 后才成为必需项。
+`hfs/start.sh` 只会在缺少必需 root Secrets（`MINIO_ROOT_USER` 或 `MINIO_ROOT_PASSWORD`）时直接退出。这是有意设计，用来让错误配置尽早暴露。`OPS_TOKEN` 有代码默认值；`ADMIN_TOKEN` 只有在 `ADMIN_ENABLED=true` 后才成为必需项。
 
 ## Hugging Face Variables
 
@@ -55,12 +57,18 @@ fatal: couldn't find remote ref main
 | --- | --- | --- | --- |
 | `PUBLIC_BASE_URL` | 否 | `https://${SPACE_HOST}` | 只有使用自定义域名或需要临时覆盖公开根 URL 时设置。 |
 | `LIBREFS_REF` | 否 | `master` | 只有要临时切 upstream branch/tag 时设置。 |
-| `LIBREFS_COMMIT` | 否 | `HEAD` | 只有要在 HF Variables 层做精确 commit pin 时设置；长期 pin 更适合写进 `Dockerfile` 默认值。 |
+| `LIBREFS_COMMIT` | 否 | `HEAD` | 发布态必须设置为具体 upstream commit SHA；长期 pin 更适合写进 `Dockerfile` 默认值。 |
 | `GO_VERSION` | 否 | `1.26.3` | 只有 upstream 明确要求更换 Go 版本时设置。 |
 | `ADMIN_ENABLED` | 否 | `false` | 只有明确需要打开 `/_admin/` 时设置为 `true`。 |
 | `CONTROL_PLANE_DEFAULT_LANG` | 否 | `en` | 只有需要改变 `/_ops/` 和 `/_admin/` JSON 文案默认语言时设置；支持 `en`、`zh-CN`。 |
 
 Docker Space 会把 Space Variables 作为 build-time `ARG` 传给 Docker build，也会在 runtime 注入为环境变量。因此 `GO_VERSION`、`LIBREFS_REF` 和 `LIBREFS_COMMIT` 可以通过 Space Variables 覆盖 Dockerfile 默认值。
+
+Release reproducibility 口径：
+
+- `LIBREFS_REF=master` + `LIBREFS_COMMIT=HEAD` 是开发默认值，不是 release pin。
+- 发布态必须提供具体 `LIBREFS_COMMIT=<upstream commit sha>`，Docker build 会校验实际 checkout 的 `git rev-parse HEAD` 是否一致。
+- 当前不改 runtime；Go tarball checksum 校验和 Ubuntu base image digest pin 属于后续 release hardening，不在本轮轻量对齐中引入。
 
 Hugging Face runtime 会提供 `SPACE_HOST`。当前 Space 的公开 host 是：
 
@@ -101,7 +109,7 @@ HF Volume:
 
 默认值维护规则：
 
-- 代码已有默认值的配置留在 `Dockerfile` / `start.sh`，不要同步到 HF Variables。
+- 代码已有默认值的配置留在 `Dockerfile` / `hfs/start.sh`，不要同步到 HF Variables。
 - upstream libreFS 默认值保持 upstream 行为，不在 HF Variables 里重复声明。
 - 需要记录“当前理解”和真实 Secret 值时，写到本地 `.env.local`，不要提交。
 - 只有自定义域名、临时排障、临时切 branch/tag、或明确需要 commit pin 时，才新增 HF Variables。
@@ -115,13 +123,15 @@ HF Volume:
 - 关键配置项的默认来源、默认值和是否建议同步到 HF。
 - 临时覆盖值的候选项。
 
-`.env.local` 不是 runtime 自动加载文件，也不是部署契约；它只是本地审计和操作前核对用的台账。仓库 `.gitignore` 应忽略 `.env` 和 `.env.*`，只允许提交 `.env.example` 这类不含真实 secret 的占位模板。
+`.env.local` 不是 runtime 自动加载文件，也不是部署契约；它只是本地审计和操作前核对用的台账。仓库 `.gitignore` 应显式忽略 `.env.local`，并忽略 `.env` 和 `.env.*`，只允许提交 `.env.example` 这类不含真实 secret 的占位模板。
 
 `.dockerignore` 也应忽略 `.env`、`.env.*` 和 `local/`，避免本地 Docker build context 把私有台账或本地材料带进镜像构建。
 
+可提交的 ENV 字段说明见 [环境变量参考](env-reference.md)。该文档只写 key、平台、分类、默认值和建议值，不写真实地址、账号、密码、token 或其他 Secret value。
+
 ## Runtime Environment Variables
 
-`start.sh` 支持这些可选变量：
+`hfs/start.sh` 支持这些可选变量：
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -142,9 +152,9 @@ HF Volume:
 | `MINIO_SERVER_URL` | 从公开根 URL 推导 | 公开 S3 endpoint。 |
 | `MINIO_BROWSER_REDIRECT_URL` | `${MINIO_SERVER_URL}/console/` | 公开 Console URL。 |
 
-除非同步修改 `nginx.conf`，不要随意修改 `LIBREFS_API_ADDR`、`LIBREFS_CONSOLE_ADDR`、`OPS_HOST`、`OPS_PORT`、`ADMIN_HOST`、`ADMIN_PORT` 和 `NGINX_CONF`。
+除非同步修改 `hfs/nginx.conf`，不要随意修改 `LIBREFS_API_ADDR`、`LIBREFS_CONSOLE_ADDR`、`OPS_HOST`、`OPS_PORT`、`ADMIN_HOST`、`ADMIN_PORT` 和 `NGINX_CONF`。
 
-如果覆盖 `MINIO_SERVER_URL`，值必须包含 `http://` 或 `https://` scheme，`start.sh` 会去掉多余尾部 `/`。如果覆盖 `MINIO_BROWSER_REDIRECT_URL`，值必须仍然落在 `/console/` 子路径；脚本会补齐末尾 `/`，但不会接受其他 Console 路径。
+如果覆盖 `MINIO_SERVER_URL`，值必须包含 `http://` 或 `https://` scheme，`hfs/start.sh` 会去掉多余尾部 `/`。如果覆盖 `MINIO_BROWSER_REDIRECT_URL`，值必须仍然落在 `/console/` 子路径；脚本会补齐末尾 `/`，但不会接受其他 Console 路径。
 
 ## 端口
 
@@ -207,11 +217,14 @@ add_header Content-Security-Policy "frame-ancestors 'self' https://huggingface.c
 
 `/_ops/` 是只读诊断面，支持：
 
+- `GET /_ops/`：浏览器聚合 dashboard；脚本或显式 `?format=json` 可返回 JSON 索引。
 - `GET /_ops/health`
 - `GET /_ops/system`
 - `GET /_ops/config`
 - `GET /_ops/version`
 - `GET /_ops/metrics`
+
+这些是外部公开路径，必须带 `/_ops/` 前缀。`/health`、`/system`、`/config`、`/version`、`/metrics` 只是在 Nginx 把 `/_ops/` 剥掉后传给内部 ops-service 的 handler path，不是公开 URL。
 
 鉴权支持：
 
@@ -220,7 +233,11 @@ curl -H "X-Ops-Token: $OPS_TOKEN" https://your-space.hf.space/_ops/health
 curl -H "Authorization: Bearer $OPS_TOKEN" https://your-space.hf.space/_ops/health
 ```
 
-`?token=` 只适合临时浏览器调试，不建议写进文档、脚本或分享链接。
+浏览器也支持表单登录和临时 query token 引导。`/_ops/?token=<ops-token>` 验证成功后会设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转到不带 token 的 `/_ops/`。后续浏览器打开 `/_ops/health`、`/_ops/system` 等路径时依赖 cookie 登录态，不需要继续把 token 放在 URL 里。
+
+`?token=` 只适合首次网页登录或临时浏览器调试，不建议写进文档、脚本、截图或分享链接。脚本和自动化应优先使用 `X-Ops-Token` 或 `Authorization: Bearer <token>`。
+
+`/_ops/healthz` 是免 token 的内部轻量 liveness endpoint，只返回 ops 服务存活状态；它不是完整诊断 API，也不应扩展为 system/config/version/metrics。
 
 ops/admin JSON 文案支持 `en` 和 `zh-CN`。语言选择优先级：
 

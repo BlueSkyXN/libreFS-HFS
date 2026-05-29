@@ -6,6 +6,7 @@ __pycache__/
 # Local environment and secrets.
 .env
 .env.*
+.env.local
 !.env.example
 !.env.*.example
 /local

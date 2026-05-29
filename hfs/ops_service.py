@@ -13,6 +13,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from typing import Any
 STARTED_AT = time.time()
 SUPPORTED_LANGUAGES = ("zh-CN", "en")
 DEFAULT_LANGUAGE = "en"
+OPS_COOKIE_NAME = "librefs_hfs_ops_token"
 
 MESSAGES = {
     "root_description": {
@@ -430,6 +432,7 @@ def render_ops_dashboard(language: str) -> str:
             "secrets": "Secret 状态",
             "version": "版本与运行时",
             "metrics": "Prometheus Metrics",
+            "api_endpoints": "API 端点",
             "raw": "原始 JSON",
             "ok": "正常",
             "bad": "异常",
@@ -437,6 +440,7 @@ def render_ops_dashboard(language: str) -> str:
             "missing": "未配置",
             "open_console": "打开 Console",
             "open_admin": "打开 Admin API",
+            "logout": "退出 Ops 登录",
             "refresh": "刷新页面",
         },
         "en": {
@@ -454,6 +458,7 @@ def render_ops_dashboard(language: str) -> str:
             "secrets": "Secret status",
             "version": "Version and runtime",
             "metrics": "Prometheus metrics",
+            "api_endpoints": "API endpoints",
             "raw": "Raw JSON",
             "ok": "OK",
             "bad": "Failed",
@@ -461,6 +466,7 @@ def render_ops_dashboard(language: str) -> str:
             "missing": "Missing",
             "open_console": "Open Console",
             "open_admin": "Open Admin API",
+            "logout": "Log out of Ops",
             "refresh": "Refresh",
         },
     }.get(language, {})
@@ -477,6 +483,7 @@ def render_ops_dashboard(language: str) -> str:
     data_disk_used = data_disk.get("used_percent")
     data_disk_label = f"{data_disk_used}%" if data_disk_used is not None else "n/a"
     query = "?format=json"
+    api_endpoints = ["/_ops/health", "/_ops/system", "/_ops/config", "/_ops/version", "/_ops/metrics"]
 
     check_rows = []
     for check in checks:
@@ -707,6 +714,7 @@ def render_ops_dashboard(language: str) -> str:
         <a class="button" href="/_admin/">{html.escape(labels["open_admin"])}</a>
         <a class="button" href="">{html.escape(labels["refresh"])}</a>
         <a class="button" href="{query}">JSON</a>
+        <a class="button" href="/_ops/logout">{html.escape(labels["logout"])}</a>
       </nav>
     </header>
 
@@ -728,6 +736,13 @@ def render_ops_dashboard(language: str) -> str:
         <div class="value">{html.escape(data_disk_label)}</div>
       </article>
     </div>
+
+    <section>
+      <h2>{html.escape(labels["api_endpoints"])}</h2>
+      <div class="section-body">
+        <table><tbody>{table_rows([(endpoint, endpoint) for endpoint in api_endpoints])}</tbody></table>
+      </div>
+    </section>
 
     <section>
       <h2>{html.escape(labels["health_checks"])}</h2>
@@ -793,6 +808,128 @@ def render_ops_dashboard(language: str) -> str:
 </html>"""
 
 
+def render_login_page(language: str, error: str = "") -> str:
+    labels = {
+        "zh-CN": {
+            "title": "Ops 登录",
+            "heading": "进入 LibreFS HFS Ops",
+            "intro": "输入 OPS_TOKEN 后会保存为浏览器 HttpOnly cookie，后续访问不需要把 token 放在 URL 里。",
+            "token": "OPS_TOKEN",
+            "submit": "登录",
+            "error": "Token 不正确。",
+            "hint": "也仍然兼容临时 URL：/_ops/?token=<ops-token>。",
+        },
+        "en": {
+            "title": "Ops login",
+            "heading": "Enter LibreFS HFS Ops",
+            "intro": "After OPS_TOKEN is accepted, the browser stores it as an HttpOnly cookie so later visits do not need token in the URL.",
+            "token": "OPS_TOKEN",
+            "submit": "Log in",
+            "error": "The token is not correct.",
+            "hint": "Temporary URL login is still supported: /_ops/?token=<ops-token>.",
+        },
+    }.get(language, {})
+    error_html = f"<p class=\"error\">{html.escape(labels['error'])}</p>" if error else ""
+    return f"""<!doctype html>
+<html lang="{html.escape(language)}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(labels["title"])}</title>
+  <style>
+    :root {{
+      --bg: #f2efe7;
+      --ink: #17211b;
+      --muted: #68746d;
+      --panel: rgba(255, 252, 244, 0.92);
+      --line: #d8d0bf;
+      --accent: #a95b1b;
+      --bad: #b42318;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 8%, rgba(169, 91, 27, 0.24), transparent 28rem),
+        radial-gradient(circle at 88% 18%, rgba(18, 122, 74, 0.16), transparent 24rem),
+        linear-gradient(135deg, #f8f1df 0%, var(--bg) 48%, #e8eadf 100%);
+      font-family: "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
+    }}
+    main {{
+      width: min(520px, 100%);
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: var(--panel);
+      box-shadow: 0 24px 70px rgba(44, 35, 21, 0.16);
+    }}
+    h1 {{
+      margin: 0;
+      font-size: clamp(2rem, 6vw, 3.8rem);
+      line-height: 0.95;
+      letter-spacing: -0.055em;
+    }}
+    p {{
+      color: var(--muted);
+      line-height: 1.55;
+    }}
+    label {{
+      display: block;
+      margin: 18px 0 8px;
+      font-weight: 850;
+    }}
+    input {{
+      width: 100%;
+      min-height: 46px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      font: inherit;
+      background: #fffdf6;
+    }}
+    button {{
+      width: 100%;
+      min-height: 48px;
+      margin-top: 14px;
+      border: 0;
+      border-radius: 999px;
+      color: #fff;
+      background: var(--accent);
+      font: inherit;
+      font-weight: 850;
+      cursor: pointer;
+    }}
+    .error {{
+      color: var(--bad);
+      font-weight: 850;
+    }}
+    .hint {{
+      margin-bottom: 0;
+      font-size: 0.92rem;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{html.escape(labels["heading"])}</h1>
+    <p>{html.escape(labels["intro"])}</p>
+    {error_html}
+    <form method="post" action="/_ops/login">
+      <label for="token">{html.escape(labels["token"])}</label>
+      <input id="token" name="token" type="password" autocomplete="current-password" autofocus required>
+      <button type="submit">{html.escape(labels["submit"])}</button>
+    </form>
+    <p class="hint">{html.escape(labels["hint"])}</p>
+  </main>
+</body>
+</html>"""
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "librefs-hfs-ops/1.0"
 
@@ -830,6 +967,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        self.send_query_token_cookie()
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -839,9 +977,45 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
+        self.send_query_token_cookie()
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def send_ops_cookie(self, token: str) -> None:
+        jar = cookies.SimpleCookie()
+        jar[OPS_COOKIE_NAME] = token
+        jar[OPS_COOKIE_NAME]["path"] = "/_ops"
+        jar[OPS_COOKIE_NAME]["secure"] = True
+        jar[OPS_COOKIE_NAME]["httponly"] = True
+        jar[OPS_COOKIE_NAME]["samesite"] = "Lax"
+        self.send_header("Set-Cookie", jar[OPS_COOKIE_NAME].OutputString())
+
+    def send_clear_ops_cookie(self) -> None:
+        jar = cookies.SimpleCookie()
+        jar[OPS_COOKIE_NAME] = ""
+        jar[OPS_COOKIE_NAME]["path"] = "/_ops"
+        jar[OPS_COOKIE_NAME]["secure"] = True
+        jar[OPS_COOKIE_NAME]["httponly"] = True
+        jar[OPS_COOKIE_NAME]["samesite"] = "Lax"
+        jar[OPS_COOKIE_NAME]["max-age"] = 0
+        self.send_header("Set-Cookie", jar[OPS_COOKIE_NAME].OutputString())
+
+    def send_query_token_cookie(self) -> None:
+        token = self.query_token()
+        if self.token_valid(token):
+            self.send_ops_cookie(token)
+
+    def send_redirect(self, location: str, token: str = "", clear_cookie: bool = False) -> None:
+        self.send_response(303)
+        self.send_header("Location", location)
+        self.send_header("Cache-Control", "no-store")
+        if token:
+            self.send_ops_cookie(token)
+        if clear_cookie:
+            self.send_clear_ops_cookie()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def wants_html(self) -> bool:
         fmt = self.query().get("format", [""])[0].strip().lower()
@@ -851,25 +1025,68 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return "text/html" in self.headers.get("Accept", "")
 
+    def external_path_without_token(self) -> str:
+        parsed = urllib.parse.urlsplit(self.path)
+        if parsed.path in {"", "/"}:
+            path = "/_ops/"
+        elif parsed.path.startswith("/_ops"):
+            path = parsed.path
+        else:
+            path = f"/_ops{parsed.path}"
+        query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+        query.pop("token", None)
+        encoded = urllib.parse.urlencode(query, doseq=True)
+        return path + (f"?{encoded}" if encoded else "")
+
     def bearer_token(self) -> str:
         auth = self.headers.get("Authorization", "")
         if auth.lower().startswith("bearer "):
             return auth[7:].strip()
         return ""
 
+    def query_token(self) -> str:
+        return self.query().get("token", [""])[0]
+
+    def cookie_token(self) -> str:
+        raw_cookie = self.headers.get("Cookie", "")
+        if not raw_cookie:
+            return ""
+        jar = cookies.SimpleCookie()
+        try:
+            jar.load(raw_cookie)
+        except cookies.CookieError:
+            return ""
+        morsel = jar.get(OPS_COOKIE_NAME)
+        return morsel.value if morsel else ""
+
+    def request_tokens(self) -> list[str]:
+        return [
+            self.headers.get("X-Ops-Token", ""),
+            self.bearer_token(),
+            self.query_token(),
+            self.cookie_token(),
+        ]
+
     def request_token(self) -> str:
-        query_token = self.query().get("token", [""])[0]
-        return self.headers.get("X-Ops-Token", "") or self.bearer_token() or query_token
+        for token in self.request_tokens():
+            if token:
+                return token
+        return ""
+
+    def token_valid(self, token: str) -> bool:
+        expected = env("OPS_TOKEN", "librefs_ops_demo_token")
+        return bool(expected) and bool(token) and hmac.compare_digest(token, expected)
 
     def authenticated(self) -> bool:
-        expected = env("OPS_TOKEN", "librefs_ops_demo_token")
-        token = self.request_token()
-        return bool(expected) and hmac.compare_digest(token, expected)
+        return any(self.token_valid(token) for token in self.request_tokens())
 
     def require_auth(self) -> bool:
         if self.authenticated():
             return True
         language = self.language()
+        if self.wants_html():
+            self.send_text(render_login_page(language), content_type="text/html; charset=utf-8", status=401)
+            return False
         self.send_json(
             {
                 "ok": False,
@@ -881,10 +1098,36 @@ class Handler(BaseHTTPRequestHandler):
         )
         return False
 
+    def do_POST(self) -> None:
+        path = self.normalized_path()
+        if path != "/login":
+            self.send_json(
+                {"ok": False, "error": "not_found", "message": text("not_found", self.language()), "path": path},
+                status=404,
+            )
+            return
+
+        length = parse_int(self.headers.get("Content-Length", "0"), 0, minimum=0, maximum=4096)
+        body = self.rfile.read(length).decode("utf-8", errors="replace")
+        token = urllib.parse.parse_qs(body).get("token", [""])[0]
+        if self.token_valid(token):
+            self.send_redirect("/_ops/", token=token)
+            return
+        self.send_text(render_login_page(self.language(), error="invalid_token"), content_type="text/html; charset=utf-8", status=401)
+
     def do_GET(self) -> None:
         path = self.normalized_path()
         if path == "/healthz":
             self.send_json({"ok": True, "service": "ops", "uptime_seconds": round(time.time() - STARTED_AT, 2)})
+            return
+
+        if path == "/logout":
+            self.send_redirect("/_ops/", clear_cookie=True)
+            return
+
+        query_token = self.query_token()
+        if query_token and self.token_valid(query_token) and self.wants_html():
+            self.send_redirect(self.external_path_without_token(), token=query_token)
             return
 
         if not self.require_auth():
@@ -900,7 +1143,7 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "service": "librefs-hfs-ops",
                     "description": text("root_description", language),
-                    "endpoints": ["/health", "/system", "/config", "/version", "/metrics"],
+                    "endpoints": ["/_ops/health", "/_ops/system", "/_ops/config", "/_ops/version", "/_ops/metrics"],
                 }
             )
         elif path == "/health":
