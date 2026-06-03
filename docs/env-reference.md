@@ -73,7 +73,7 @@
 | `OPS_PORT` | `HF` | `V` | 通常不需要 | `8081`。 | `8081`。 | ops-service 内部监听端口。 | 改动必须同步 `hfs/nginx.conf` 的 `/_ops/` 反代。 |
 | `ADMIN_HOST` | `HF` | `V` | 通常不需要 | `127.0.0.1`。 | `127.0.0.1`。 | admin-service 内部监听地址。 | 改动必须同步 `hfs/nginx.conf` 的 `/_admin/` 反代。 |
 | `ADMIN_PORT` | `HF` | `V` | 通常不需要 | `8082`。 | `8082`。 | admin-service 内部监听端口。 | 改动必须同步 `hfs/nginx.conf` 的 `/_admin/` 反代。 |
-| `ADMIN_AUDIT_LOG` | `HF` | `V` | 通常不需要 | `/data/logs/admin-audit.jsonl`。 | `/data/logs/admin-audit.jsonl`。 | admin 写操作审计日志路径。 | 应落在可写且可持久化的目录。 |
+| `ADMIN_AUDIT_LOG` | `HF` | `V` | 通常不需要 | `/tmp/librefs-hfs/admin-audit.jsonl`。 | `/tmp/librefs-hfs/admin-audit.jsonl`。 | admin 写操作审计日志路径。 | 默认不持久化；如果需要保留 admin audit，再显式改到持久化目录。 |
 | `ADMIN_FILES_ENABLED` | `HF` | `V` | 不推荐 | `false`。 | `false`。 | admin status payload 的预留字段。 | 设置它不会启用 file manager。 |
 | `ADMIN_FILES_WRITE_ENABLED` | `HF` | `V` | 不推荐 | `false`。 | `false`。 | admin status payload 的预留字段。 | 设置它不会启用文件写入能力。 |
 

@@ -70,4 +70,4 @@ LibreFS HFS 是 libreFS 的 Hugging Face Docker Space 部署包装层。仓库�
 
 - 需要按需执行 `scripts/smoke-s3-curl.sh`，覆盖真实 S3 写入/读取、policy 和匿名直链。
 - 需要做 `/data` 重启和 rebuild 后读回验收，不能只凭 volume 挂载判断持久化已通过。
-- 文档中的生产状态是 2026-05-29 的快照；涉及 HF Variables、Secrets、Volumes、`origin/main`/`hf/main` 差异和 runtime sha 时必须重新回读。
+- 文档中的生产状态是 2026-06-03 的快照；涉及 HF Variables、Secrets、Volumes、`origin/main`/`hf/main` 差异和 runtime sha 时必须重新回读。

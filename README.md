@@ -85,16 +85,16 @@ Hugging Face Docker Space 只对外暴露一个 app port。本项目用 Nginx �
 
 ## 当前生产配置快照
 
-最近回读时间：2026-05-29。实时状态以命令重新查询为准。
+最近回读时间：2026-06-03。实时状态以命令重新查询为准。
 
 | 项目 | 当前值 / 状态 |
 | --- | --- |
-| GitHub `origin/main` | `b498d4effbfc02d7e95f77a8f98bb3a790df9f00` |
-| Hugging Face `hf/main` | `007485be905313ddc426c86fbd4322c80bb87797`；GitHub main 已领先，尚未推送到 HF 部署仓。 |
+| GitHub `origin/main` | 以 `git ls-remote origin refs/heads/main` 回读为准。 |
+| Hugging Face `hf/main` / runtime | 以 `git ls-remote hf refs/heads/main` 和 `hf spaces info BlueSkyXN/libreFS-HFS` 的 runtime sha 回读为准；发布完成后应与 GitHub main 对齐。 |
 | Health endpoint | `/minio/health/ready` 回读 `HTTP 200`。 |
-| HF Variables | 已显式配置 `ADMIN_ENABLED=true`、`LIBREFS_COMMIT=e194bd779f36fdc08f310d2819d9356f0c1f991b`、公开 URL、Go/ref 默认值和若干 MinIO 兼容变量；详见 `docs/contract-alignment.md`。 |
+| HF Variables | 已显式配置 `ADMIN_ENABLED=true`、`ADMIN_AUDIT_LOG=/tmp/librefs-hfs/admin-audit.jsonl`、`LIBREFS_COMMIT=e194bd779f36fdc08f310d2819d9356f0c1f991b`、公开 URL、Go/ref 默认值和若干 MinIO 兼容变量；详见 `docs/contract-alignment.md`。 |
 | HF Secrets | `MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`、`OPS_TOKEN`、`ADMIN_TOKEN` 已配置；HF 不回显 value。 |
-| HF Volume | `BlueSkyXN/libreFS-HFS-storage -> /data`，`read_only=False` |
+| HF Volume | `BlueSkyXN/librefs-hfs-data -> /data`，`read_only=False` |
 
 ## 文档入口
 

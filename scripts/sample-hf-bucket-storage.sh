@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-DEFAULT_BUCKET="BlueSkyXN/libreFS-HFS-storage"
+DEFAULT_BUCKET="BlueSkyXN/librefs-hfs-data"
 BUCKET="${HF_BUCKET_ID:-$DEFAULT_BUCKET}"
 OPS_URL="${OPS_URL:-}"
 INTERVAL=0
@@ -15,7 +15,7 @@ Sample Hugging Face Storage Bucket accounting and visible tree size.
 The script is read-only and emits one JSON object per line.
 
 Options:
-  --bucket <bucket-id>  HF bucket id. Defaults to HF_BUCKET_ID or BlueSkyXN/libreFS-HFS-storage.
+  --bucket <bucket-id>  HF bucket id. Defaults to HF_BUCKET_ID or BlueSkyXN/librefs-hfs-data.
   --ops-url <url>       Optional ops base URL, for example https://host/_ops.
                         Requires OPS_TOKEN and calls <url>/storage?format=json.
   --interval <seconds>  Sleep interval between samples. Defaults to 0.

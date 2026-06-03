@@ -89,10 +89,11 @@ hf spaces variables list BlueSkyXN/libreFS-HFS
 No results found.
 ```
 
-当前生产环境最近回读为 2026-05-29 快照：
+当前生产环境最近回读为 2026-06-03 快照：
 
 ```text
 ADMIN_ENABLED=true
+ADMIN_AUDIT_LOG=/tmp/librefs-hfs/admin-audit.jsonl
 PUBLIC_BASE_URL=https://blueskyxn-librefs-hfs.hf.space
 MINIO_SERVER_URL=https://blueskyxn-librefs-hfs.hf.space
 MINIO_BROWSER_REDIRECT_URL=https://blueskyxn-librefs-hfs.hf.space/console/
@@ -133,7 +134,7 @@ hf spaces volumes list BlueSkyXN/libreFS-HFS
 
 ```text
 type    source                          mount_path  read_only
-bucket  BlueSkyXN/libreFS-HFS-storage   /data       False
+bucket  BlueSkyXN/librefs-hfs-data   /data       False
 ```
 
 如果输出 `No results found`，说明对象数据不保证持久。

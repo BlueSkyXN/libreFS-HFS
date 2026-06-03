@@ -147,7 +147,7 @@ def admin_token() -> str:
 
 
 def audit_path() -> Path:
-    return Path(env("ADMIN_AUDIT_LOG", "/data/logs/admin-audit.jsonl"))
+    return Path(env("ADMIN_AUDIT_LOG", "/tmp/librefs-hfs/admin-audit.jsonl"))
 
 
 def audit_event(action: str, ok: bool, actor: str, details: dict[str, Any] | None = None) -> None:

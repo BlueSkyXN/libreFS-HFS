@@ -2,18 +2,18 @@
 
 本文档把当前代码事实、生产回读状态和文档维护口径放在同一处，用于减少文档漂移。修改代码或远端配置后，先更新这里，再同步其他文档。
 
-最后核对时间：2026-05-29。
+最后核对时间：2026-06-03。
 
 ## 当前生产回读
 
 | 项目 | 当前状态 | 证据命令 |
 | --- | --- | --- |
-| GitHub `origin/main` | `b498d4effbfc02d7e95f77a8f98bb3a790df9f00` | `git ls-remote origin HEAD refs/heads/main` |
-| Hugging Face `hf/main` | `007485be905313ddc426c86fbd4322c80bb87797`；GitHub main 已领先，尚未推送到 HF 部署仓。 | `git ls-remote hf HEAD refs/heads/main` |
+| GitHub `origin/main` | 以远端回读为准；发布完成后应与 `hf/main` 和 Space runtime sha 对齐。 | `git ls-remote origin refs/heads/main` |
+| Hugging Face `hf/main` / runtime | 以远端和 Space metadata 回读为准；发布完成后应与 GitHub main 对齐。 | `git ls-remote hf refs/heads/main`; `hf spaces info BlueSkyXN/libreFS-HFS` |
 | Space health | `/minio/health/ready` 回读 `HTTP 200`；Space API 可能需要认证，不能只依赖匿名 `curl`。 | `curl -fsS https://blueskyxn-librefs-hfs.hf.space/minio/health/ready -o /dev/null -w 'health_http=%{http_code}\n'` |
-| HF Variables | 当前显式配置：`ADMIN_ENABLED=true`、`PUBLIC_BASE_URL`、`MINIO_SERVER_URL`、`MINIO_BROWSER_REDIRECT_URL`、`GO_VERSION=1.26.3`、`LIBREFS_REF=master`、`LIBREFS_COMMIT=e194bd779f36fdc08f310d2819d9356f0c1f991b`、`MINIO_SITE_NAME`、`MINIO_SITE_REGION`、`MINIO_BROWSER`、`MINIO_BROWSER_REDIRECT`、`MINIO_UPDATE`、`MINIO_CALLHOME_ENABLE`、`MINIO_API_ROOT_ACCESS`、`MINIO_API_CORS_ALLOW_ORIGIN`。其中多项与代码默认或 upstream 默认值重复，属于可后续清理的配置噪音。 | `hf spaces variables list BlueSkyXN/libreFS-HFS` |
+| HF Variables | 当前显式配置：`ADMIN_ENABLED=true`、`ADMIN_AUDIT_LOG=/tmp/librefs-hfs/admin-audit.jsonl`、`PUBLIC_BASE_URL`、`MINIO_SERVER_URL`、`MINIO_BROWSER_REDIRECT_URL`、`GO_VERSION=1.26.3`、`LIBREFS_REF=master`、`LIBREFS_COMMIT=e194bd779f36fdc08f310d2819d9356f0c1f991b`、`MINIO_SITE_NAME`、`MINIO_SITE_REGION`、`MINIO_BROWSER`、`MINIO_BROWSER_REDIRECT`、`MINIO_UPDATE`、`MINIO_CALLHOME_ENABLE`、`MINIO_API_ROOT_ACCESS`、`MINIO_API_CORS_ALLOW_ORIGIN`。其中多项与代码默认或 upstream 默认值重复，属于可后续清理的配置噪音。 | `hf spaces variables list BlueSkyXN/libreFS-HFS` |
 | HF Secrets | `MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`、`OPS_TOKEN`、`ADMIN_TOKEN` 已存在；HF 不回显 value。 | `hf spaces secrets list BlueSkyXN/libreFS-HFS` |
-| HF Volume | `bucket BlueSkyXN/libreFS-HFS-storage -> /data`，`read_only=False` | `hf spaces volumes list BlueSkyXN/libreFS-HFS` |
+| HF Volume | `bucket BlueSkyXN/librefs-hfs-data -> /data`，`read_only=False` | `hf spaces volumes list BlueSkyXN/libreFS-HFS` |
 
 生产状态是快照，不是永久保证。涉及实时状态、Secret 同步、Volume 挂载或 runtime sha 时必须重新回读。
 
@@ -48,7 +48,7 @@
 | Admin 写操作 | `reload-nginx` 是写 action，必须 JSON body `{"confirm": true}`，并写审计日志 | `hfs/admin_service.py` | `docs/architecture.md`, `docs/configuration.md`, `docs/operations.md` |
 | Admin 非目标 | 没有 Web terminal、file manager、bucket/policy/root credential 管理或 `librefs` restart | `hfs/admin_service.py`, 当前路由 | `README.md`, `docs/architecture.md`, `docs/configuration.md`, `docs/usage.md`, `docs/operations.md` |
 | 双语文案 | 支持 `en` 和 `zh-CN`；语言优先级为 `?lang=`、`X-Control-Language`、`Accept-Language`、`CONTROL_PLANE_DEFAULT_LANG`、默认 `en` | `hfs/ops_service.py`, `hfs/admin_service.py` | `README.md`, `docs/configuration.md`, `docs/operations.md`, `docs/architecture.md` |
-| 数据目录 | libreFS 数据和 admin audit log 默认在 `/data`；当前生产挂载 Storage Bucket 到 `/data` | `hfs/start.sh`, HF Volumes | `README.md`, `docs/architecture.md`, `docs/operations.md`, `docs/usage.md` |
+| 数据目录 | libreFS 数据默认在 `/data`；admin audit log 默认在 `/tmp/librefs-hfs/admin-audit.jsonl`；当前生产挂载 Storage Bucket 到 `/data` | `hfs/start.sh`, `hfs/admin_service.py`, HF Volumes | `README.md`, `docs/architecture.md`, `docs/operations.md`, `docs/usage.md` |
 | 持久化口径 | Volume 挂载不等于持久化验收通过；仍需上传、重启、读取、rebuild、再读取 | 运维要求 | 所有持久化说明 |
 | S3 smoke | `scripts/smoke-s3-curl.sh` 会真实创建临时 bucket/object、设置 public read policy 并清理 | `scripts/smoke-s3-curl.sh` | `docs/README.md`, `docs/operations.md`, `docs/source-walkthrough.md` |
 | 契约验证 | `scripts/validate-contract.sh` 检查 front matter、Dockerfile、`hfs/start.sh`、Python、Nginx、license 和可选远端 health | `scripts/validate-contract.sh` | `docs/README.md`, `docs/operations.md`, `docs/source-walkthrough.md` |

@@ -51,7 +51,7 @@ fatal: couldn't find remote ref main
 
 ## Hugging Face Variables
 
-原则：不要把和代码默认值、upstream 默认值相同的配置同步到 Hugging Face Variables。Variables 只用于表达“这个 Space 明确要覆盖默认行为”。代码默认部署下，HF Variables 可以为空；当前生产环境为了开启 admin，已显式设置 `ADMIN_ENABLED=true`。
+原则：不要把和代码默认值、upstream 默认值相同的配置同步到 Hugging Face Variables。Variables 只用于表达“这个 Space 明确要覆盖默认行为”。代码默认部署下，HF Variables 可以为空；当前生产环境为了开启 admin，已显式设置 `ADMIN_ENABLED=true`，并显式设置 `ADMIN_AUDIT_LOG=/tmp/librefs-hfs/admin-audit.jsonl` 让 admin audit 不写入 `/data`。
 
 | Variable | 必需 | 默认值 | 什么时候设置 |
 | --- | --- | --- | --- |
@@ -88,10 +88,10 @@ HF Variables:
 - empty
 
 HF Volume:
-- BlueSkyXN/libreFS-HFS-storage -> /data
+- BlueSkyXN/librefs-hfs-data -> /data
 ```
 
-当前生产环境最近回读状态（2026-05-29）：
+当前生产环境最近回读状态（2026-06-03）：
 
 ```text
 HF Secrets:
@@ -102,6 +102,7 @@ HF Secrets:
 
 HF Variables:
 - ADMIN_ENABLED=true
+- ADMIN_AUDIT_LOG=/tmp/librefs-hfs/admin-audit.jsonl
 - PUBLIC_BASE_URL=https://blueskyxn-librefs-hfs.hf.space
 - MINIO_SERVER_URL=https://blueskyxn-librefs-hfs.hf.space
 - MINIO_BROWSER_REDIRECT_URL=https://blueskyxn-librefs-hfs.hf.space/console/
@@ -118,7 +119,7 @@ HF Variables:
 - MINIO_API_CORS_ALLOW_ORIGIN=*
 
 HF Volume:
-- BlueSkyXN/libreFS-HFS-storage -> /data
+- BlueSkyXN/librefs-hfs-data -> /data
 ```
 
 其中 `LIBREFS_COMMIT` 已经提供发布态 upstream commit pin；`GO_VERSION`、`LIBREFS_REF` 和若干 MinIO 变量与当前默认值重复，属于后续可以清理的配置噪音。清理 HF Variables 是 live operation，不应在普通文档或代码审查中自动执行。
@@ -161,7 +162,7 @@ HF Volume:
 | `ADMIN_ENABLED` | `false` | 是否开启 `/_admin/`。 |
 | `ADMIN_HOST` | `127.0.0.1` | admin-service bind host；不要和 Nginx 静态路由不一致。 |
 | `ADMIN_PORT` | `8082` | admin-service port；不要和 Nginx 静态路由不一致。 |
-| `ADMIN_AUDIT_LOG` | `/data/logs/admin-audit.jsonl` | admin action 审计日志。 |
+| `ADMIN_AUDIT_LOG` | `/tmp/librefs-hfs/admin-audit.jsonl` | admin action 审计日志；默认不写入 `/data`。 |
 | `ADMIN_FILES_ENABLED` | `false` | 预留状态字段；当前没有 file manager，设置它不会启用文件管理功能。 |
 | `ADMIN_FILES_WRITE_ENABLED` | `false` | 预留状态字段；当前没有 file manager 写入能力，设置它不会启用文件写入功能。 |
 | `CONTROL_PLANE_DEFAULT_LANG` | `en` | ops/admin JSON 文案默认语言；支持 `en`、`zh-CN`。 |
@@ -189,7 +190,7 @@ HF Space 外部只暴露 `7860`。
 | 路径 | owner | 用途 |
 | --- | --- | --- |
 | `/data` | UID/GID `1000` | libreFS 对象数据和元数据。 |
-| `/data/logs` | UID/GID `1000` | admin audit log 和未来日志白名单目录。 |
+| `/tmp/librefs-hfs` | UID/GID `1000` | 默认 admin audit log 目录。 |
 | `/tmp/nginx/*` | UID/GID `1000` | Nginx 临时目录。 |
 | `/usr/local/bin/librefs` | root-owned executable | 编译出来的 libreFS binary。 |
 | `/usr/local/bin/librefs-ops-service.py` | root-owned Python file | 只读 ops-service。 |

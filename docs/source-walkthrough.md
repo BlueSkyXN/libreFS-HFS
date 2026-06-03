@@ -194,7 +194,7 @@ https://blueskyxn-librefs-hfs.hf.space/minio/health/ready
 | `ADMIN_ENABLED` | `false` | admin-service 是否开启。 |
 | `ADMIN_HOST` | `127.0.0.1` | admin-service bind host。 |
 | `ADMIN_PORT` | `8082` | admin-service port。 |
-| `ADMIN_AUDIT_LOG` | `/data/logs/admin-audit.jsonl` | admin action 审计日志。 |
+| `ADMIN_AUDIT_LOG` | `/tmp/librefs-hfs/admin-audit.jsonl` | admin action 审计日志；默认不写入 `/data`。 |
 | `ADMIN_FILES_ENABLED` | `false` | 预留状态字段；当前不提供 file manager。 |
 | `ADMIN_FILES_WRITE_ENABLED` | `false` | 预留状态字段；当前不提供 file manager 写入能力。 |
 | `CONTROL_PLANE_DEFAULT_LANG` | `en` | ops/admin JSON 文案默认语言；支持 `en`、`zh-CN`。 |
@@ -436,14 +436,14 @@ scripts/validate-contract.sh --remote
 默认 bucket：
 
 ```text
-BlueSkyXN/libreFS-HFS-storage
+BlueSkyXN/librefs-hfs-data
 ```
 
 可通过 `--bucket` 或 `HF_BUCKET_ID` 覆盖。默认 one-shot 输出一行 JSONL；需要连续采样时使用：
 
 ```bash
 scripts/sample-hf-bucket-storage.sh \
-  --bucket BlueSkyXN/libreFS-HFS-storage \
+  --bucket BlueSkyXN/librefs-hfs-data \
   --count 3 \
   --interval 60
 ```
@@ -453,7 +453,7 @@ scripts/sample-hf-bucket-storage.sh \
 ```bash
 OPS_TOKEN='<ops-token>' \
 scripts/sample-hf-bucket-storage.sh \
-  --bucket BlueSkyXN/libreFS-HFS-storage \
+  --bucket BlueSkyXN/librefs-hfs-data \
   --ops-url https://blueskyxn-librefs-hfs.hf.space/_ops
 ```
 
@@ -566,4 +566,4 @@ hf spaces logs BlueSkyXN/libreFS-HFS --tail 200
 hf spaces volumes list BlueSkyXN/libreFS-HFS
 ```
 
-当前 `hf spaces volumes list` 显示已挂载 `BlueSkyXN/libreFS-HFS-storage` 到 `/data`。挂载状态仍应通过上传对象、重启 Space、读取对象、rebuild 后再次读取来验收。
+当前 `hf spaces volumes list` 显示已挂载 `BlueSkyXN/librefs-hfs-data` 到 `/data`。挂载状态仍应通过上传对象、重启 Space、读取对象、rebuild 后再次读取来验收。

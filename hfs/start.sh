@@ -14,7 +14,7 @@ OPS_TOKEN="${OPS_TOKEN:-librefs_ops_demo_token}"
 ADMIN_ENABLED="${ADMIN_ENABLED:-false}"
 ADMIN_HOST="${ADMIN_HOST:-127.0.0.1}"
 ADMIN_PORT="${ADMIN_PORT:-8082}"
-ADMIN_AUDIT_LOG="${ADMIN_AUDIT_LOG:-${DATA_DIR%/}/logs/admin-audit.jsonl}"
+ADMIN_AUDIT_LOG="${ADMIN_AUDIT_LOG:-/tmp/librefs-hfs/admin-audit.jsonl}"
 
 export DATA_DIR
 export LIBREFS_API_ADDR
@@ -55,9 +55,11 @@ if [[ "$MINIO_BROWSER_REDIRECT_URL" != */console/ ]]; then
   exit 1
 fi
 
+audit_log_dir="$(dirname "$ADMIN_AUDIT_LOG")"
+
 mkdir -p \
   "$DATA_DIR" \
-  "${DATA_DIR%/}/logs" \
+  "$audit_log_dir" \
   /tmp/nginx/client_body \
   /tmp/nginx/proxy \
   /tmp/nginx/fastcgi \

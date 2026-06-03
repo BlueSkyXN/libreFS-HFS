@@ -51,7 +51,7 @@ flowchart TD
 3. 从 `PUBLIC_BASE_URL`、`SPACE_HOST` 或本地 fallback 推导公开根地址。
 4. 设置 `MINIO_SERVER_URL`。
 5. 设置 `MINIO_BROWSER_REDIRECT_URL=<public-base>/console/`。
-6. 创建 `/data`、`/data/logs` 和 Nginx 临时目录。
+6. 创建 `/data`、admin audit log 目录和 Nginx 临时目录。
 7. 执行 `nginx -t` 校验配置。
 8. 后台启动 `librefs server /data --address :9000 --console-address :9001`。
 9. 后台启动 ops-service，监听 `127.0.0.1:8081`。
@@ -121,7 +121,7 @@ libreFS 将对象数据和元数据写到：
 
 如果没有挂载 Hugging Face Storage Bucket，`/data` 是容器本地临时目录。它适合短期测试和临时文件共享，但不保证持久。
 
-当前 `hf spaces volumes list` 显示已经把 `BlueSkyXN/libreFS-HFS-storage` 挂载到 `/data`。挂载只证明路径具备持久化条件；仍需要重新做“上传对象 -> 重启 Space -> 读取对象 -> rebuild 后再次读取”的持久化验收。
+当前 `hf spaces volumes list` 显示已经把 `BlueSkyXN/librefs-hfs-data` 挂载到 `/data`。挂载只证明路径具备持久化条件；仍需要重新做“上传对象 -> 重启 Space -> 读取对象 -> rebuild 后再次读取”的持久化验收。
 
 `/_ops/storage` 可以扫描容器内 `DATA_DIR` 当前可见文件树，报告 visible bytes、file count、top prefixes、largest files、recent files 和 `.minio.sys` 重点内部目录统计。这个 endpoint 只看挂载目录当前可见状态，不能回读 Hugging Face Storage Bucket 的 `info.size` 账面值或后端 GC 状态。
 
@@ -140,7 +140,7 @@ ops 脚本访问应使用 `X-Ops-Token` 或 `Authorization: Bearer <token>`。�
 
 容器内日志做了额外收敛：Nginx access log 使用不含 query string 的自定义格式，ops-service 自身请求日志会 redact `token=` 值，ops 响应也会设置 `Referrer-Policy: no-referrer`。这不能替代 header/bearer token，只是降低首次浏览器 bootstrap 的泄漏面。
 
-`/_admin/` 是独立管理面，代码默认 `ADMIN_ENABLED=false`。开启时必须设置 `ADMIN_TOKEN`，通过独立 header 或 bearer token 鉴权；代码不强制 `ADMIN_TOKEN` 和 `OPS_TOKEN` 的值不同。当前生产环境已显式设置 `ADMIN_ENABLED=true`。当前白名单 action 只有 `run-health-checks` 和 `reload-nginx`，其中 `reload-nginx` 需要 `confirm=true` 并写入 `/data/logs/admin-audit.jsonl`。当前版本不提供 Web terminal、file manager、bucket/policy/root credential 管理或 `librefs` restart。
+`/_admin/` 是独立管理面，代码默认 `ADMIN_ENABLED=false`。开启时必须设置 `ADMIN_TOKEN`，通过独立 header 或 bearer token 鉴权；代码不强制 `ADMIN_TOKEN` 和 `OPS_TOKEN` 的值不同。当前生产环境已显式设置 `ADMIN_ENABLED=true`。当前白名单 action 只有 `run-health-checks` 和 `reload-nginx`，其中 `reload-nginx` 需要 `confirm=true` 并写入 `ADMIN_AUDIT_LOG`，默认路径为 `/tmp/librefs-hfs/admin-audit.jsonl`。当前版本不提供 Web terminal、file manager、bucket/policy/root credential 管理或 `librefs` restart。
 
 ops/admin JSON 支持 `en` 和 `zh-CN` 文案。`error`、endpoint path 和 action `name` 保持机器可读稳定值；`message`、`hint`、`label`、`description`、`risk` 和 `notes` 按 `?lang=`、`X-Control-Language`、`Accept-Language` 或 `CONTROL_PLANE_DEFAULT_LANG` 返回对应语言，避免管理界面误读危险操作。
 

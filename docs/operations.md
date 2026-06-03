@@ -12,7 +12,7 @@ Console:
 https://blueskyxn-librefs-hfs.hf.space/console/
 ```
 
-最近生产回读时间：2026-05-29。实时状态以本页命令重新查询为准；`origin/main`、`hf/main` 和 Space runtime sha 都可能在合并或推送后立即过期。
+最近生产回读时间：2026-06-03。实时状态以本页命令重新查询为准；`origin/main`、`hf/main` 和 Space runtime sha 都可能在合并或推送后立即过期。
 
 ## 检查 Space 状态
 
@@ -152,7 +152,7 @@ curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
 
 ```bash
 scripts/sample-hf-bucket-storage.sh \
-  --bucket BlueSkyXN/libreFS-HFS-storage
+  --bucket BlueSkyXN/librefs-hfs-data
 ```
 
 同时采样 `/_ops/storage`：
@@ -160,7 +160,7 @@ scripts/sample-hf-bucket-storage.sh \
 ```bash
 OPS_TOKEN='<ops-token>' \
 scripts/sample-hf-bucket-storage.sh \
-  --bucket BlueSkyXN/libreFS-HFS-storage \
+  --bucket BlueSkyXN/librefs-hfs-data \
   --ops-url https://blueskyxn-librefs-hfs.hf.space/_ops
 ```
 
@@ -169,7 +169,7 @@ scripts/sample-hf-bucket-storage.sh \
 ```bash
 OPS_TOKEN='<ops-token>' \
 scripts/sample-hf-bucket-storage.sh \
-  --bucket BlueSkyXN/libreFS-HFS-storage \
+  --bucket BlueSkyXN/librefs-hfs-data \
   --ops-url https://blueskyxn-librefs-hfs.hf.space/_ops \
   --count 3 \
   --interval 60
@@ -243,7 +243,7 @@ curl -fsS -X POST -H "X-Admin-Token: $ADMIN_TOKEN" \
   https://blueskyxn-librefs-hfs.hf.space/_admin/api/actions/reload-nginx
 ```
 
-当前版本不提供 Web terminal、file manager、任意 shell command、bucket/policy/root credential 管理或 `librefs` restart。admin action 会写入 `/data/logs/admin-audit.jsonl`。
+当前版本不提供 Web terminal、file manager、任意 shell command、bucket/policy/root credential 管理或 `librefs` restart。admin action 会写入 `ADMIN_AUDIT_LOG`，默认路径为 `/tmp/librefs-hfs/admin-audit.jsonl`，不进入 `/data`。
 
 ## Console 静态资源检查
 
@@ -407,7 +407,7 @@ HF Variables:
 - empty
 
 HF Volume:
-- BlueSkyXN/libreFS-HFS-storage -> /data
+- BlueSkyXN/librefs-hfs-data -> /data
 ```
 
 当前生产环境最近回读为：
@@ -421,6 +421,7 @@ HF Secrets:
 
 HF Variables:
 - ADMIN_ENABLED=true
+- ADMIN_AUDIT_LOG=/tmp/librefs-hfs/admin-audit.jsonl
 - PUBLIC_BASE_URL=https://blueskyxn-librefs-hfs.hf.space
 - MINIO_SERVER_URL=https://blueskyxn-librefs-hfs.hf.space
 - MINIO_BROWSER_REDIRECT_URL=https://blueskyxn-librefs-hfs.hf.space/console/
@@ -437,7 +438,7 @@ HF Variables:
 - MINIO_API_CORS_ALLOW_ORIGIN=*
 
 HF Volume:
-- BlueSkyXN/libreFS-HFS-storage -> /data
+- BlueSkyXN/librefs-hfs-data -> /data
 ```
 
 `LIBREFS_COMMIT` 是有效的 release pin；`GO_VERSION`、`LIBREFS_REF` 和若干 MinIO 变量与当前默认值重复，属于后续可清理的配置噪音。清理 Variables 会改变线上配置，应作为单独 live operation 执行。
@@ -448,7 +449,7 @@ HF Volume:
 2. upstream libreFS 默认值不要在 HF Variables 里重复声明。
 3. Secret 真实值只保存在 HF Secrets 和本地 `.env.local`，不要提交进仓库。
 4. `.env.local` 是本地台账，不是 runtime 自动加载文件；它用于记录默认值、覆盖候选和不能从 HF 回读的 secret value。
-5. 只有自定义域名、临时排障、临时切 upstream ref 或明确 commit pin 时，才新增 HF Variables。
+5. 只有自定义域名、临时排障、临时切 upstream ref、明确 commit pin，或需要把非业务日志移出 `/data` 时，才新增 HF Variables。
 
 检查云端是否保持精简：
 
@@ -463,10 +464,10 @@ hf spaces volumes list BlueSkyXN/libreFS-HFS
 ```text
 variables: No results found.
 secrets: MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, OPS_TOKEN
-volume: BlueSkyXN/libreFS-HFS-storage -> /data
+volume: BlueSkyXN/librefs-hfs-data -> /data
 ```
 
-当前生产启用了 admin，并且当前回读到一个具体 `LIBREFS_COMMIT` 发布 pin，因此 `variables` 不应为空，`secrets` 也应包含 `ADMIN_TOKEN`。HF CLI 不回显 Secret value，只能回读 key；需要确认 value 是否同步时，用本地 `.env.local` 的 token 调线上 `/_ops/` 或 `/_admin/` 验证。
+当前生产启用了 admin，显式把 `ADMIN_AUDIT_LOG` 指到 `/tmp/librefs-hfs/admin-audit.jsonl`，并且当前回读到一个具体 `LIBREFS_COMMIT` 发布 pin，因此 `variables` 不应为空，`secrets` 也应包含 `ADMIN_TOKEN`。HF CLI 不回显 Secret value，只能回读 key；需要确认 value 是否同步时，用本地 `.env.local` 的 token 调线上 `/_ops/` 或 `/_admin/` 验证。
 
 ## 持久化检查
 
@@ -474,7 +475,7 @@ volume: BlueSkyXN/libreFS-HFS-storage -> /data
 
 ```text
 type: bucket
-source: BlueSkyXN/libreFS-HFS-storage
+source: BlueSkyXN/librefs-hfs-data
 mount_path: /data
 read_only: False
 ```
@@ -485,7 +486,7 @@ read_only: False
 hf spaces volumes list BlueSkyXN/libreFS-HFS
 ```
 
-如果没有 volume，数据不持久。当前线上 Space 应保持 `BlueSkyXN/libreFS-HFS-storage` 挂载到 `/data`。
+如果没有 volume，数据不持久。当前线上 Space 应保持 `BlueSkyXN/librefs-hfs-data` 挂载到 `/data`。
 
 挂载 Storage Bucket 到 `/data` 后，需要做持久化验收：
 
