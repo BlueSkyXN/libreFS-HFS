@@ -41,7 +41,7 @@ https://blueskyxn-librefs-hfs.hf.space/console/
 | --- | --- | --- |
 | S3-compatible API | 可用 | 公开域名根路径 `/` 转发到 libreFS S3 API。 |
 | Web Console | 可用 | `/console/` 转发到 libreFS Web Console；公开页面、静态资源和 iframe header 已回读正常，登录需 root 凭证复测。 |
-| 只读 Ops | 可用 / 需 token | `/_ops/` 提供浏览器诊断面板，并提供 `/_ops/health`、`/_ops/system`、`/_ops/config`、`/_ops/version`、`/_ops/metrics` API；默认使用 `OPS_TOKEN` 保护，只返回非敏感摘要。 |
+| 只读 Ops | 可用 / 需 token | `/_ops/` 提供浏览器诊断面板，并提供 `/_ops/health`、`/_ops/system`、`/_ops/storage`、`/_ops/config`、`/_ops/version`、`/_ops/metrics` API；默认使用 `OPS_TOKEN` 保护，只返回非敏感摘要和 `/data` 可见文件树统计。 |
 | Admin 管理面 | 代码默认关闭 / 当前线上已开启 | 代码默认 `ADMIN_ENABLED=false`；当前 HF Variable 为 `ADMIN_ENABLED=true`，访问 `/_admin/` 需要 `ADMIN_TOKEN`，只提供白名单 action。 |
 | 签名上传/下载 | 需凭证验收 | 设计上走 AWS SigV4 path-style；仓库提供 `scripts/smoke-s3-curl.sh`，涉及 Secret 的 smoke test 需在操作时重新执行。 |
 | HTTP 直链 | 条件可用 | bucket policy 允许匿名 `s3:GetObject` 后可直链访问。 |
@@ -150,12 +150,14 @@ curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
 ```text
 /_ops/health
 /_ops/system
+/_ops/storage
 /_ops/config
 /_ops/version
 /_ops/metrics
 ```
 
 `/_ops/config` 只返回非敏感配置和 Secret 是否存在，不返回 `MINIO_ROOT_PASSWORD`、`OPS_TOKEN` 或 `ADMIN_TOKEN` 原文。
+`/_ops/storage` 只扫描 `DATA_DIR` 当前可见文件树，返回路径、size、mtime 和聚合统计；它不能回读 Hugging Face bucket 的 `info.size` 账面值。
 
 `/_ops/` 和 `/_admin/` 支持中文/英文文案。脚本可用 `?lang=zh-CN` 或 `X-Control-Language: zh-CN` 指定语言，浏览器会按 `Accept-Language` 自动选择；未指定时默认英文。
 

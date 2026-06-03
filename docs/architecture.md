@@ -16,7 +16,7 @@ LibreFS HFS 是 libreFS 的 Hugging Face Docker Space 部署包装层。包装�
 | Docker build | `Dockerfile` | 安装 Go，拉取 libreFS 源码，编译 `librefs`，生成 runtime image。 |
 | 启动脚本 | `hfs/start.sh` | 校验必需 Secrets，设置公开 URL 环境变量，启动 libreFS、ops-service、admin-service 和 Nginx，处理退出。 |
 | 反向代理 | `hfs/nginx.conf` | 把公开 `7860` 流量分发到 ops、admin、Console 和 S3 API。 |
-| 只读诊断 | `hfs/ops_service.py` | 提供 `/_ops/` dashboard，以及 `/_ops/health`、system、config、version 和 metrics API。 |
+| 只读诊断 | `hfs/ops_service.py` | 提供 `/_ops/` dashboard，以及 `/_ops/health`、system、storage、config、version 和 metrics API。 |
 | 管理面 | `hfs/admin_service.py` | 默认关闭；开启后提供 status、action catalog、run-health-checks 和 reload-nginx。 |
 | 数据目录 | `/data` | libreFS 对象数据和元数据目录。 |
 | Space 元数据 | `README.md` | 声明 `sdk: docker`、`app_port: 7860` 等 HF Space 信息。 |
@@ -81,6 +81,7 @@ flowchart LR
 | `/_ops/` | `http://127.0.0.1:8081/` | 只读诊断 dashboard 和 API 入口，需要 `OPS_TOKEN`。 |
 | `/_ops/health` | `http://127.0.0.1:8081/health` | 只读 health API；外部路径必须带 `/_ops/` 前缀。 |
 | `/_ops/system` | `http://127.0.0.1:8081/system` | 只读 system API；外部路径必须带 `/_ops/` 前缀。 |
+| `/_ops/storage` | `http://127.0.0.1:8081/storage` | 只读 storage visible tree API；只扫描 `/data` 当前可见文件树。 |
 | `/_ops/config` | `http://127.0.0.1:8081/config` | 只读 config API，只返回 Secret presence。 |
 | `/_ops/version` | `http://127.0.0.1:8081/version` | 只读 version API。 |
 | `/_ops/metrics` | `http://127.0.0.1:8081/metrics` | Prometheus metrics，仍需要 ops token。 |
@@ -96,7 +97,7 @@ flowchart LR
 
 `/_ops/` 和 `/_admin/` 必须排在 `location /` 前面，否则 S3 API 根路径会接管这些保留路径。不要创建名为 `_ops` 或 `_admin` 的 bucket。
 
-Nginx 会把 `/_ops/` 前缀剥掉再转发给 ops-service，所以内部 handler 看到的是 `/health`、`/system`、`/config`、`/version` 和 `/metrics`。这些短路径不是外部公开 URL；用户文档、脚本和面板链接都必须使用 `/_ops/...`。
+Nginx 会把 `/_ops/` 前缀剥掉再转发给 ops-service，所以内部 handler 看到的是 `/health`、`/system`、`/storage`、`/config`、`/version` 和 `/metrics`。这些短路径不是外部公开 URL；用户文档、脚本和面板链接都必须使用 `/_ops/...`。
 
 ## URL 环境变量
 
@@ -122,6 +123,8 @@ libreFS 将对象数据和元数据写到：
 
 当前 `hf spaces volumes list` 显示已经把 `BlueSkyXN/libreFS-HFS-storage` 挂载到 `/data`。挂载只证明路径具备持久化条件；仍需要重新做“上传对象 -> 重启 Space -> 读取对象 -> rebuild 后再次读取”的持久化验收。
 
+`/_ops/storage` 可以扫描容器内 `DATA_DIR` 当前可见文件树，报告 visible bytes、file count、top prefixes、largest files、recent files 和 `.minio.sys` 重点内部目录统计。这个 endpoint 只看挂载目录当前可见状态，不能回读 Hugging Face Storage Bucket 的 `info.size` 账面值或后端 GC 状态。
+
 ## 安全模型
 
 S3 API 是公网可访问的，但默认需要 S3 签名认证。root 凭证来自：
@@ -131,7 +134,7 @@ S3 API 是公网可访问的，但默认需要 S3 签名认证。root 凭证来�
 
 Web Console 也是公网可访问，但需要登录。
 
-`/_ops/` 是只读诊断面，使用 `OPS_TOKEN` 保护。它可以返回 dashboard、health、system、config、version 和 metrics，但 `/_ops/config` 只返回 secret 是否存在，不返回 secret 原文。不要把写操作、任意命令、SQL、文件读取或重启能力放进 `/_ops`。
+`/_ops/` 是只读诊断面，使用 `OPS_TOKEN` 保护。它可以返回 dashboard、health、system、storage、config、version 和 metrics，但 `/_ops/config` 只返回 secret 是否存在，不返回 secret 原文，`/_ops/storage` 只返回路径元数据和聚合统计。不要把写操作、任意命令、SQL、文件内容读取或重启能力放进 `/_ops`。
 
 ops 脚本访问应使用 `X-Ops-Token` 或 `Authorization: Bearer <token>`。浏览器首次进入可临时使用 `/_ops/?token=<ops-token>` 或登录表单；验证成功后服务设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转到不带 token 的 URL。脚本/API 请求不接受 query token 鉴权，避免 token 长期留在 URL、代理日志或截图中。
 

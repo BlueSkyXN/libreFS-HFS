@@ -236,11 +236,12 @@ add_header Content-Security-Policy "frame-ancestors 'self' https://huggingface.c
 - `GET /_ops/`：浏览器聚合 dashboard；脚本或显式 `?format=json` 可返回 JSON 索引。
 - `GET /_ops/health`
 - `GET /_ops/system`
+- `GET /_ops/storage`
 - `GET /_ops/config`
 - `GET /_ops/version`
 - `GET /_ops/metrics`
 
-这些是外部公开路径，必须带 `/_ops/` 前缀。`/health`、`/system`、`/config`、`/version`、`/metrics` 只是在 Nginx 把 `/_ops/` 剥掉后传给内部 ops-service 的 handler path，不是公开 URL。
+这些是外部公开路径，必须带 `/_ops/` 前缀。`/health`、`/system`、`/storage`、`/config`、`/version`、`/metrics` 只是在 Nginx 把 `/_ops/` 剥掉后传给内部 ops-service 的 handler path，不是公开 URL。
 
 鉴权支持：
 
@@ -266,6 +267,7 @@ ops/admin JSON 文案支持 `en` 和 `zh-CN`。语言选择优先级：
 `error`、action `name`、endpoint path 等机器可读字段保持稳定；`message`、`hint`、`label`、`description`、`risk` 和 `notes` 按语言返回，避免管理界面误读操作含义。
 
 `/_ops/config` 只返回 `MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`、`OPS_TOKEN`、`ADMIN_TOKEN` 是否存在，不返回真实值。
+`/_ops/storage` 只返回 `DATA_DIR` 当前可见文件树的相对路径、size、mtime 和聚合统计，不读取对象内容，也不能回读 Hugging Face bucket 的 `info.size` 账面值。
 
 `/_admin/` 是独立管理面，默认关闭：
 

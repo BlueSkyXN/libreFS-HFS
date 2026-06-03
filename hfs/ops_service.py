@@ -14,6 +14,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import deque
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,6 +26,28 @@ SUPPORTED_LANGUAGES = ("zh-CN", "en")
 DEFAULT_LANGUAGE = "en"
 OPS_COOKIE_NAME = "librefs_hfs_ops_token"
 TOKEN_QUERY_RE = re.compile(r"([?&]token=)[^&\s\"]+")
+STORAGE_SCAN_DEFAULTS = {
+    "max_files": 5000,
+    "max_depth": 8,
+    "top_limit": 20,
+    "timeout_ms": 1500,
+}
+STORAGE_SCAN_CAPS = {
+    "max_files": 50000,
+    "max_depth": 16,
+    "top_limit": 100,
+    "timeout_ms": 10000,
+}
+STORAGE_SCAN_CACHE_TTL_SECONDS = 15
+STORAGE_SCAN_CACHE: dict[tuple[str, int, int, int, int], tuple[float, dict[str, Any]]] = {}
+MINIO_INTERNAL_AREAS = [
+    ".minio.sys",
+    ".minio.sys/tmp",
+    ".minio.sys/tmp/.trash",
+    ".minio.sys/multipart",
+    ".minio.sys/buckets",
+    ".minio.sys/config",
+]
 
 MESSAGES = {
     "root_description": {
@@ -284,6 +307,247 @@ def disk_payload(path: str) -> dict[str, Any]:
         return {"path": str(target), "error": str(exc)}
 
 
+def first_query_value(query: dict[str, list[str]] | None, key: str) -> str:
+    if not query:
+        return ""
+    values = query.get(key, [])
+    return values[0] if values else ""
+
+
+def storage_scan_options(query: dict[str, list[str]] | None = None) -> dict[str, int]:
+    return {
+        "max_files": parse_int(
+            first_query_value(query, "max_files"),
+            STORAGE_SCAN_DEFAULTS["max_files"],
+            minimum=1,
+            maximum=STORAGE_SCAN_CAPS["max_files"],
+        ),
+        "max_depth": parse_int(
+            first_query_value(query, "max_depth"),
+            STORAGE_SCAN_DEFAULTS["max_depth"],
+            minimum=1,
+            maximum=STORAGE_SCAN_CAPS["max_depth"],
+        ),
+        "top_limit": parse_int(
+            first_query_value(query, "top_limit"),
+            STORAGE_SCAN_DEFAULTS["top_limit"],
+            minimum=1,
+            maximum=STORAGE_SCAN_CAPS["top_limit"],
+        ),
+        "timeout_ms": parse_int(
+            first_query_value(query, "timeout_ms"),
+            STORAGE_SCAN_DEFAULTS["timeout_ms"],
+            minimum=100,
+            maximum=STORAGE_SCAN_CAPS["timeout_ms"],
+        ),
+    }
+
+
+def empty_file_stats() -> dict[str, Any]:
+    return {"files": 0, "bytes": 0, "newest_mtime": None}
+
+
+def update_file_stats(stats: dict[str, Any], size: int, mtime: float) -> None:
+    stats["files"] = parse_int(stats.get("files", 0), 0) + 1
+    stats["bytes"] = parse_int(stats.get("bytes", 0), 0) + size
+    newest = stats.get("newest_mtime")
+    if newest is None or mtime > float(newest):
+        stats["newest_mtime"] = int(mtime)
+
+
+def storage_area_label(path: str) -> str:
+    label = path
+    if label.startswith(".minio.sys/"):
+        label = label[len(".minio.sys/") :]
+    elif label == ".minio.sys":
+        label = "minio_sys"
+    return label.replace(".", "").replace("/", "_").replace("-", "_") or "root"
+
+
+def sorted_stats_records(stats_by_name: dict[str, dict[str, Any]], top_limit: int) -> list[dict[str, Any]]:
+    records = [{"prefix": name, **stats} for name, stats in stats_by_name.items()]
+    records.sort(key=lambda item: (-parse_int(item.get("bytes", 0), 0), str(item.get("prefix", ""))))
+    return records[:top_limit]
+
+
+def file_record(path: str, size: int, mtime: float) -> dict[str, Any]:
+    return {"path": path, "size": size, "mtime": int(mtime)}
+
+
+def scan_storage_tree(root: Path, options: dict[str, int]) -> dict[str, Any]:
+    started = time.monotonic()
+    deadline = started + (options["timeout_ms"] / 1000)
+    files_seen = 0
+    dirs_seen = 0
+    errors_seen = 0
+    total_bytes = 0
+    newest_mtime: int | None = None
+    truncated = False
+    file_records: list[dict[str, Any]] = []
+    prefixes: dict[str, dict[str, Any]] = {}
+
+    def elapsed_ms() -> float:
+        return round((time.monotonic() - started) * 1000, 2)
+
+    if not root.exists():
+        return {
+            "ok": False,
+            "time": int(time.time()),
+            "data_dir": str(root),
+            "error": "data_dir_missing",
+            "scan": {
+                "duration_ms": elapsed_ms(),
+                **options,
+                "truncated": False,
+                "files_seen": 0,
+                "dirs_seen": 0,
+                "errors_seen": 1,
+            },
+            "visible_tree": {
+                "total_files": 0,
+                "total_dirs": 0,
+                "total_bytes": 0,
+                "newest_mtime": None,
+            },
+            "prefixes": [],
+            "minio_internal": {
+                area: {"exists": False, "files": 0, "bytes": 0, "newest_mtime": None}
+                for area in MINIO_INTERNAL_AREAS
+            },
+            "largest_files": [],
+            "recent_files": [],
+            "notes": [
+                "This endpoint reports only the mounted DATA_DIR visible tree; it cannot report Hugging Face bucket accounting size.",
+            ],
+        }
+
+    queue: deque[tuple[Path, list[str]]] = deque([(root, [])])
+    stop_scan = False
+    while queue:
+        if time.monotonic() >= deadline:
+            truncated = True
+            stop_scan = True
+            break
+
+        current, rel_parts = queue.popleft()
+        try:
+            entries = os.scandir(current)
+        except OSError:
+            errors_seen += 1
+            continue
+
+        with entries:
+            for entry in entries:
+                if time.monotonic() >= deadline:
+                    truncated = True
+                    stop_scan = True
+                    break
+
+                child_parts = [*rel_parts, entry.name]
+                child_depth = len(child_parts)
+                rel_path = "/".join(child_parts)
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        dirs_seen += 1
+                        if child_depth < options["max_depth"]:
+                            queue.append((Path(entry.path), child_parts))
+                        else:
+                            truncated = True
+                        continue
+
+                    if not entry.is_file(follow_symlinks=False):
+                        continue
+
+                    if files_seen >= options["max_files"]:
+                        truncated = True
+                        stop_scan = True
+                        break
+
+                    stats = entry.stat(follow_symlinks=False)
+                except OSError:
+                    errors_seen += 1
+                    continue
+
+                size = int(stats.st_size)
+                mtime = float(stats.st_mtime)
+                files_seen += 1
+                total_bytes += size
+                newest_mtime = int(mtime) if newest_mtime is None else max(newest_mtime, int(mtime))
+                file_records.append(file_record(rel_path, size, mtime))
+
+                prefix = child_parts[0] if child_parts else "."
+                prefix_stats = prefixes.setdefault(prefix, empty_file_stats())
+                update_file_stats(prefix_stats, size, mtime)
+
+        if stop_scan:
+            break
+
+    internal: dict[str, dict[str, Any]] = {}
+    for area in MINIO_INTERNAL_AREAS:
+        area_stats = empty_file_stats()
+        for record in file_records:
+            path = str(record.get("path", ""))
+            if path == area or path.startswith(f"{area}/"):
+                update_file_stats(area_stats, parse_int(record.get("size", 0), 0), parse_int(record.get("mtime", 0), 0))
+        internal[area] = {
+            "exists": (root / area).exists(),
+            "files": area_stats["files"],
+            "bytes": area_stats["bytes"],
+            "newest_mtime": area_stats["newest_mtime"],
+        }
+
+    largest_files = sorted(file_records, key=lambda item: (-parse_int(item.get("size", 0), 0), str(item.get("path", ""))))
+    recent_files = sorted(file_records, key=lambda item: (-parse_int(item.get("mtime", 0), 0), str(item.get("path", ""))))
+
+    return {
+        "ok": True,
+        "time": int(time.time()),
+        "data_dir": str(root),
+        "scan": {
+            "duration_ms": elapsed_ms(),
+            **options,
+            "truncated": truncated,
+            "files_seen": files_seen,
+            "dirs_seen": dirs_seen,
+            "errors_seen": errors_seen,
+        },
+        "visible_tree": {
+            "total_files": files_seen,
+            "total_dirs": dirs_seen,
+            "total_bytes": total_bytes,
+            "newest_mtime": newest_mtime,
+        },
+        "prefixes": sorted_stats_records(prefixes, options["top_limit"]),
+        "minio_internal": internal,
+        "largest_files": largest_files[: options["top_limit"]],
+        "recent_files": recent_files[: options["top_limit"]],
+        "notes": [
+            "This endpoint reports only the mounted DATA_DIR visible tree; it cannot report Hugging Face bucket accounting size.",
+            "If scan.truncated is true, visible tree counts are partial because a bounded scan limit was reached.",
+        ],
+    }
+
+
+def storage_payload(query: dict[str, list[str]] | None = None) -> dict[str, Any]:
+    options = storage_scan_options(query)
+    data_dir = env("DATA_DIR", "/data")
+    cache_key = (
+        data_dir,
+        options["max_files"],
+        options["max_depth"],
+        options["top_limit"],
+        options["timeout_ms"],
+    )
+    now = time.monotonic()
+    cached = STORAGE_SCAN_CACHE.get(cache_key)
+    if cached and cached[0] > now:
+        return json.loads(json.dumps(cached[1]))
+
+    payload = scan_storage_tree(Path(data_dir), options)
+    STORAGE_SCAN_CACHE[cache_key] = (now + STORAGE_SCAN_CACHE_TTL_SECONDS, payload)
+    return json.loads(json.dumps(payload))
+
+
 def process_count() -> int | None:
     try:
         return sum(1 for child in Path("/proc").iterdir() if child.name.isdigit())
@@ -344,6 +608,7 @@ def metric_escape(value: Any) -> str:
 def metrics_payload() -> str:
     health = health_payload(public=True)
     system = system_payload()
+    storage = storage_payload()
     lines = [
         "# HELP librefs_hfs_ops_up Whether the ops service is running.",
         "# TYPE librefs_hfs_ops_up gauge",
@@ -365,6 +630,58 @@ def metrics_payload() -> str:
         lines.append(f'librefs_hfs_memory_available_bytes {memory["available_bytes"]}')
     if disk.get("free_bytes") is not None:
         lines.append(f'librefs_hfs_data_free_bytes {disk["free_bytes"]}')
+    visible_tree = storage.get("visible_tree", {})
+    scan = storage.get("scan", {})
+    if visible_tree.get("total_bytes") is not None:
+        lines.extend(
+            [
+                "# HELP librefs_hfs_data_visible_bytes Total bytes in the bounded DATA_DIR visible tree scan.",
+                "# TYPE librefs_hfs_data_visible_bytes gauge",
+                f'librefs_hfs_data_visible_bytes {visible_tree["total_bytes"]}',
+            ]
+        )
+    if visible_tree.get("total_files") is not None:
+        lines.extend(
+            [
+                "# HELP librefs_hfs_data_visible_files Total files in the bounded DATA_DIR visible tree scan.",
+                "# TYPE librefs_hfs_data_visible_files gauge",
+                f'librefs_hfs_data_visible_files {visible_tree["total_files"]}',
+            ]
+        )
+    if scan.get("truncated") is not None:
+        lines.extend(
+            [
+                "# HELP librefs_hfs_data_scan_truncated Whether the latest DATA_DIR visible tree scan hit a bound.",
+                "# TYPE librefs_hfs_data_scan_truncated gauge",
+                f'librefs_hfs_data_scan_truncated {metric_bool(scan.get("truncated"))}',
+            ]
+        )
+    if scan.get("duration_ms") is not None:
+        lines.extend(
+            [
+                "# HELP librefs_hfs_data_scan_duration_ms Duration of the latest DATA_DIR visible tree scan.",
+                "# TYPE librefs_hfs_data_scan_duration_ms gauge",
+                f'librefs_hfs_data_scan_duration_ms {scan["duration_ms"]}',
+            ]
+        )
+    lines.extend(
+        [
+            "# HELP librefs_hfs_data_prefix_bytes Bytes by top-level DATA_DIR prefix in the bounded visible tree scan.",
+            "# TYPE librefs_hfs_data_prefix_bytes gauge",
+        ]
+    )
+    for prefix in storage.get("prefixes", []):
+        label = metric_escape(prefix.get("prefix", "unknown"))
+        lines.append(f'librefs_hfs_data_prefix_bytes{{prefix="{label}"}} {prefix.get("bytes", 0)}')
+    lines.extend(
+        [
+            "# HELP librefs_hfs_data_minio_internal_bytes Bytes in selected MinIO/libreFS internal DATA_DIR areas.",
+            "# TYPE librefs_hfs_data_minio_internal_bytes gauge",
+        ]
+    )
+    for area, area_stats in storage.get("minio_internal", {}).items():
+        label = metric_escape(storage_area_label(area))
+        lines.append(f'librefs_hfs_data_minio_internal_bytes{{area="{label}"}} {area_stats.get("bytes", 0)}')
     lines.append(f'librefs_hfs_ops_uptime_seconds {system["ops_uptime_seconds"]}')
     return "\n".join(lines) + "\n"
 
@@ -398,6 +715,12 @@ def format_seconds(value: Any) -> str:
     return " ".join(parts)
 
 
+def format_timestamp(value: Any) -> str:
+    if not isinstance(value, (int, float)):
+        return "n/a"
+    return time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(value))
+
+
 def json_block(payload: Any) -> str:
     data = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2)
     return html.escape(data)
@@ -413,6 +736,35 @@ def table_rows(rows: list[tuple[str, Any]]) -> str:
             "</tr>"
         )
     return "\n".join(body)
+
+
+def record_table_rows(records: list[dict[str, Any]], columns: list[tuple[str, str, str]]) -> str:
+    body = []
+    for record in records:
+        cells = []
+        for key, _label, value_type in columns:
+            value = record.get(key)
+            if value_type == "bytes":
+                rendered = format_bytes(value)
+            elif value_type == "mtime":
+                rendered = format_timestamp(value)
+            else:
+                rendered = str(value if value is not None else "n/a")
+            cells.append(f"<td>{html.escape(rendered)}</td>")
+        body.append(f"<tr>{''.join(cells)}</tr>")
+    return "\n".join(body)
+
+
+def record_table(records: list[dict[str, Any]], columns: list[tuple[str, str, str]], empty_label: str) -> str:
+    if not records:
+        return f"<p>{html.escape(empty_label)}</p>"
+    headers = "".join(f"<th>{html.escape(label)}</th>" for _key, label, _value_type in columns)
+    return (
+        "<table>"
+        f"<thead><tr>{headers}</tr></thead>"
+        f"<tbody>{record_table_rows(records, columns)}</tbody>"
+        "</table>"
+    )
 
 
 def badge(ok: Any, true_label: str, false_label: str) -> str:
@@ -434,6 +786,11 @@ def render_ops_dashboard(language: str) -> str:
             "routes": "路由",
             "health_checks": "健康检查",
             "system": "系统资源",
+            "storage": "存储可见文件树",
+            "top_prefixes": "前缀占用排行",
+            "recent_files": "最近文件",
+            "largest_files": "最大文件",
+            "no_records": "无记录",
             "config": "配置摘要",
             "secrets": "Secret 状态",
             "version": "版本与运行时",
@@ -460,6 +817,11 @@ def render_ops_dashboard(language: str) -> str:
             "routes": "Routes",
             "health_checks": "Health checks",
             "system": "System resources",
+            "storage": "Storage visible tree",
+            "top_prefixes": "Top prefixes",
+            "recent_files": "Recent files",
+            "largest_files": "Largest files",
+            "no_records": "No records",
             "config": "Config summary",
             "secrets": "Secret status",
             "version": "Version and runtime",
@@ -479,6 +841,7 @@ def render_ops_dashboard(language: str) -> str:
 
     health = health_payload()
     system = system_payload()
+    storage = storage_payload()
     config = config_payload(language)
     version = version_payload()
     metrics = metrics_payload()
@@ -488,8 +851,17 @@ def render_ops_dashboard(language: str) -> str:
     data_disk = system.get("data_disk", {})
     data_disk_used = data_disk.get("used_percent")
     data_disk_label = f"{data_disk_used}%" if data_disk_used is not None else "n/a"
+    visible_tree = storage.get("visible_tree", {})
+    storage_scan = storage.get("scan", {})
     query = "?format=json"
-    api_endpoints = ["/_ops/health", "/_ops/system", "/_ops/config", "/_ops/version", "/_ops/metrics"]
+    api_endpoints = [
+        "/_ops/health",
+        "/_ops/system",
+        "/_ops/storage",
+        "/_ops/config",
+        "/_ops/version",
+        "/_ops/metrics",
+    ]
 
     check_rows = []
     for check in checks:
@@ -778,6 +1150,46 @@ def render_ops_dashboard(language: str) -> str:
     </section>
 
     <section>
+      <h2>{html.escape(labels["storage"])}</h2>
+      <div class="section-body">
+        <table><tbody>{table_rows([
+            ("data_dir", storage.get("data_dir")),
+            ("visible_bytes", format_bytes(visible_tree.get("total_bytes"))),
+            ("visible_files", visible_tree.get("total_files")),
+            ("visible_dirs", visible_tree.get("total_dirs")),
+            ("newest_mtime", format_timestamp(visible_tree.get("newest_mtime"))),
+            ("scan_duration", f"{storage_scan.get('duration_ms', 'n/a')} ms"),
+            ("scan_truncated", storage_scan.get("truncated")),
+            ("scan_limits", {
+                "max_files": storage_scan.get("max_files"),
+                "max_depth": storage_scan.get("max_depth"),
+                "top_limit": storage_scan.get("top_limit"),
+                "timeout_ms": storage_scan.get("timeout_ms"),
+            }),
+        ])}</tbody></table>
+        <h2>{html.escape(labels["top_prefixes"])}</h2>
+        {record_table(storage.get("prefixes", []), [
+            ("prefix", "Prefix", "text"),
+            ("bytes", "Bytes", "bytes"),
+            ("files", "Files", "text"),
+            ("newest_mtime", "Newest", "mtime"),
+        ], labels["no_records"])}
+        <h2>{html.escape(labels["largest_files"])}</h2>
+        {record_table(storage.get("largest_files", []), [
+            ("path", "Path", "text"),
+            ("size", "Size", "bytes"),
+            ("mtime", "Modified", "mtime"),
+        ], labels["no_records"])}
+        <h2>{html.escape(labels["recent_files"])}</h2>
+        {record_table(storage.get("recent_files", []), [
+            ("path", "Path", "text"),
+            ("size", "Size", "bytes"),
+            ("mtime", "Modified", "mtime"),
+        ], labels["no_records"])}
+      </div>
+    </section>
+
+    <section>
       <h2>{html.escape(labels["config"])}</h2>
       <div class="section-body">
         <table><tbody>{table_rows(safe_config_rows)}</tbody></table>
@@ -805,6 +1217,7 @@ def render_ops_dashboard(language: str) -> str:
       <div class="section-body">
         <details><summary>health</summary><pre>{json_block(health)}</pre></details>
         <details><summary>system</summary><pre>{json_block(system)}</pre></details>
+        <details><summary>storage</summary><pre>{json_block(storage)}</pre></details>
         <details><summary>config</summary><pre>{json_block(config)}</pre></details>
         <details><summary>version</summary><pre>{json_block(version)}</pre></details>
       </div>
@@ -1144,13 +1557,22 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "service": "librefs-hfs-ops",
                     "description": text("root_description", language),
-                    "endpoints": ["/_ops/health", "/_ops/system", "/_ops/config", "/_ops/version", "/_ops/metrics"],
+                    "endpoints": [
+                        "/_ops/health",
+                        "/_ops/system",
+                        "/_ops/storage",
+                        "/_ops/config",
+                        "/_ops/version",
+                        "/_ops/metrics",
+                    ],
                 }
             )
         elif path == "/health":
             self.send_json(health_payload())
         elif path == "/system":
             self.send_json(system_payload())
+        elif path == "/storage":
+            self.send_json(storage_payload(self.query()))
         elif path == "/config":
             self.send_json(config_payload(self.language()))
         elif path == "/version":

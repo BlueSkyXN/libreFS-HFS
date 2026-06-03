@@ -56,10 +56,12 @@ scripts/validate-contract.sh
 
 - Markdown 和配置 diff 是否存在 whitespace 或 conflict marker。
 - `hfs/start.sh` Bash 语法。
+- `scripts/smoke-s3-curl.sh` 和 `scripts/sample-hf-bucket-storage.sh` Bash 语法。
 - `hfs/ops_service.py` 和 `hfs/admin_service.py` Python 语法。
 - `README.md` front matter 是否仍是 Docker Space、`app_port: 7860` 和 AGPL-3.0。
 - `Dockerfile` 是否保持 Ubuntu builder/runtime、远端源码构建和 `7860` healthcheck。
 - `hfs/nginx.conf` 是否保持 `/_ops/`、`/_admin/`、`/console/`、S3 根路径、iframe header 和单端口契约。
+- `/_ops/storage` 和 storage metrics 是否仍被 ops-service 暴露，HF bucket 采样脚本是否仍是只读。
 - 本机如果安装了 `nginx`，会运行 `nginx -t -c "$PWD/hfs/nginx.conf"`。
 
 需要顺手检查公开 health endpoint 时：
@@ -84,7 +86,7 @@ https://blueskyxn-librefs-hfs.hf.space/_ops/
 https://blueskyxn-librefs-hfs.hf.space/_ops/?token=<ops-token>
 ```
 
-token 验证成功后，服务会设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转回不带 token 的 `/_ops/`。后续浏览器打开 `/_ops/health`、`/_ops/system`、`/_ops/config`、`/_ops/version` 或 `/_ops/metrics` 会复用 cookie 登录态。脚本/API 请求不接受 query token 鉴权，必须使用 header、bearer token 或浏览器 cookie。退出登录使用：
+token 验证成功后，服务会设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转回不带 token 的 `/_ops/`。后续浏览器打开 `/_ops/health`、`/_ops/system`、`/_ops/storage`、`/_ops/config`、`/_ops/version` 或 `/_ops/metrics` 会复用 cookie 登录态。脚本/API 请求不接受 query token 鉴权，必须使用 header、bearer token 或浏览器 cookie。退出登录使用：
 
 ```text
 https://blueskyxn-librefs-hfs.hf.space/_ops/logout
@@ -104,10 +106,13 @@ curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
   https://blueskyxn-librefs-hfs.hf.space/_ops/system
 
 curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
+  https://blueskyxn-librefs-hfs.hf.space/_ops/storage
+
+curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
   https://blueskyxn-librefs-hfs.hf.space/_ops/config
 ```
 
-外部 API 必须带 `/_ops/` 前缀；裸 `/health`、`/system`、`/config`、`/version`、`/metrics` 不是公开 URL，只是内部 handler path。
+外部 API 必须带 `/_ops/` 前缀；裸 `/health`、`/system`、`/storage`、`/config`、`/version`、`/metrics` 不是公开 URL，只是内部 handler path。
 
 `/_ops/config` 只返回非敏感配置摘要和 Secret 是否存在，不返回 Secret 原文。`/_ops/metrics` 返回 Prometheus text format，但仍需要 token。
 
@@ -123,6 +128,77 @@ curl -fsS -H "X-Admin-Token: $ADMIN_TOKEN" \
 ```
 
 未显式传语言时，服务会按 `Accept-Language` 选择；没有浏览器语言时默认英文。机器可读的 `error` 和 action `name` 保持英文稳定，管理界面应展示 `message`、`label`、`description` 和 `risk`。
+
+## Storage drift monitoring
+
+这个流程用于排查：
+
+```text
+HF bucket info.size 很大，但 /data 当前 visible tree 很小
+```
+
+先看容器内 `DATA_DIR` 当前可见文件树：
+
+```bash
+OPS_TOKEN='<ops-token>'
+
+curl -fsS -H "X-Ops-Token: $OPS_TOKEN" \
+  "https://blueskyxn-librefs-hfs.hf.space/_ops/storage?format=json"
+```
+
+`/_ops/storage` 只扫描挂载在容器里的 `/data`，返回相对路径、size、mtime、top prefixes、`.minio.sys` 重点内部目录、最大文件和最近文件。它不读取文件内容，也不能直接回读 Hugging Face bucket 的 `info.size`。
+
+对比 HF bucket 账面和 visible tree 时，使用只读采样脚本：
+
+```bash
+scripts/sample-hf-bucket-storage.sh \
+  --bucket BlueSkyXN/libreFS-HFS-storage
+```
+
+同时采样 `/_ops/storage`：
+
+```bash
+OPS_TOKEN='<ops-token>' \
+scripts/sample-hf-bucket-storage.sh \
+  --bucket BlueSkyXN/libreFS-HFS-storage \
+  --ops-url https://blueskyxn-librefs-hfs.hf.space/_ops
+```
+
+连续采样：
+
+```bash
+OPS_TOKEN='<ops-token>' \
+scripts/sample-hf-bucket-storage.sh \
+  --bucket BlueSkyXN/libreFS-HFS-storage \
+  --ops-url https://blueskyxn-librefs-hfs.hf.space/_ops \
+  --count 3 \
+  --interval 60
+```
+
+脚本输出 JSONL，关键字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `info_size` | `hf buckets info` 返回的 bucket 账面 size。 |
+| `info_total_files` | `hf buckets info` 返回的 total files。 |
+| `visible_sum` | `hf buckets list -R` 当前 visible file size 求和。 |
+| `visible_files` | `hf buckets list -R` 当前 visible file 数。 |
+| `drift_bytes` | `info_size - visible_sum`。 |
+| `ops_visible_sum` | 可选 `/_ops/storage` 返回的容器内 visible bytes。 |
+| `largest_visible_file` | HF visible tree 中最大的当前文件。 |
+
+判断表：
+
+| 观察结果 | 说明 | 下一步 |
+| --- | --- | --- |
+| `info_size` 继续上涨，`visible_sum` 基本不变 | 仍有写入源、覆盖写或 backend accounting 未收敛 | 先停写并查 runtime logs / 外部客户端上传。 |
+| `info_size` 不涨也不降，`visible_sum` 很小 | 写入源可能已停；旧账面占用未收敛或 GC 延迟 | 保留采样证据，必要时新 bucket 迁移或联系 HF support 核账。 |
+| `info_size` 慢慢下降 | HF backend GC/accounting 正在收敛 | 继续低频采样，不要反复 rebuild 干扰判断。 |
+| `ops_visible_sum` 与 `visible_sum` 接近 | 容器 `/data` 和 HF visible tree 基本一致 | drift 主要在 HF bucket accounting 层，不是容器临时盘。 |
+| `ops_visible_sum` 明显大于 `visible_sum` | 容器内有 HF CLI visible tree 未覆盖的文件，或采样窗口不同 | 看 `/_ops/storage` 的 `prefixes`、`largest_files`、`recent_files`。 |
+| `scan.truncated=true` | `/_ops/storage` 达到扫描上限，统计是部分结果 | 临时提高 `max_files`、`max_depth` 或 `timeout_ms`，仍受硬上限保护。 |
+
+不要通过手工删除 `.minio.sys`、`xl.meta`、`part.1` 或 bucket 底层路径来“修账”。如果需要立刻恢复到干净账面，优先通过 libreFS/MinIO S3 API 导出业务对象，新建 HF bucket，切换 volume 后再导入业务对象。
 
 ## Admin 管理入口
 

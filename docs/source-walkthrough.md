@@ -29,6 +29,7 @@
 | `.gitignore` | 否 | 本地 Git 忽略规则。 |
 | `scripts/validate-contract.sh` | 否 | 本地轻量契约验证入口，不编译 libreFS。 |
 | `scripts/smoke-s3-curl.sh` | 否 | 凭证型 S3 smoke test，使用 `curl --aws-sigv4` 验证最小读写和 public read policy。 |
+| `scripts/sample-hf-bucket-storage.sh` | 否 | 只读 HF bucket accounting / visible tree 采样脚本，用于排查 storage drift。 |
 | `docs/*.md` | 否 | 文档，不参与 runtime，但会触发 Space rebuild。 |
 
 ## `README.md`
@@ -310,12 +311,13 @@ Console 代理层还会隐藏 upstream `X-Frame-Options`，并添加 `Content-Se
 | `/_ops/` | 浏览器默认返回聚合 dashboard；脚本或 `?format=json` 返回 JSON 索引。 |
 | `/_ops/health` | 返回 Nginx S3 health、libreFS S3 health、Console 端口和 ops uptime。 |
 | `/_ops/system` | 返回时间、uptime、load、内存、磁盘和进程数。 |
+| `/_ops/storage` | 返回 `DATA_DIR` 当前可见文件树统计、top prefixes、MinIO/libreFS 内部目录统计、最大文件和最近文件。 |
 | `/_ops/config` | 返回非敏感配置和 Secret presence，不返回 Secret value。 |
 | `/_ops/version` | 返回 libreFS ref/commit、Go/Ubuntu/Python/runtime 信息。 |
 | `/_ops/metrics` | 返回 Prometheus text format。 |
 | `/_ops/healthz` | 免 token 的轻量 liveness endpoint，只证明 ops-service 存活。 |
 
-`/health`、`/system`、`/config`、`/version`、`/metrics` 是 Nginx 剥掉 `/_ops/` 后传给内部 handler 的路径，不是外部 URL。文档和用户说明必须写完整 `/_ops/...`。
+`/health`、`/system`、`/storage`、`/config`、`/version`、`/metrics` 是 Nginx 剥掉 `/_ops/` 后传给内部 handler 的路径，不是外部 URL。文档和用户说明必须写完整 `/_ops/...`。
 
 ops 鉴权支持三种方式：
 
@@ -326,6 +328,17 @@ ops 鉴权支持三种方式：
 `/_ops/?token=<ops-token>` 只作为浏览器首次登录入口。验证成功后，服务设置 `Secure; HttpOnly; SameSite=Lax; Path=/_ops` cookie，并跳转到不带 token 的 URL。后续浏览器点击 dashboard、JSON 索引或各 API endpoint 时复用 cookie；脚本和 JSON API 请求不接受 query token 鉴权，必须使用 header/bearer token 或浏览器 cookie。
 
 为降低临时 URL token 泄漏面，`hfs/nginx.conf` 的 access log 使用不含 query string 的自定义格式；ops-service 自身请求日志会 redact `token=` 值，并在 ops 响应中设置 `Referrer-Policy: no-referrer`。这只降低容器内日志和跳转 referer 风险，外部代理、浏览器历史、截图和聊天记录仍可能暴露带 token 的 URL。
+
+`/_ops/storage` 的扫描是有界只读 walk，不读取文件内容。默认限制为 `max_files=5000`、`max_depth=8`、`top_limit=20`、`timeout_ms=1500`，并支持 query 覆盖；代码会强制上限 `max_files<=50000`、`max_depth<=16`、`top_limit<=100`、`timeout_ms<=10000`。返回字段包括：
+
+- `data_dir`：实际扫描目录，默认 `/data`。
+- `scan`：扫描耗时、限制、是否 truncated、file/dir/error 计数。
+- `visible_tree`：当前可见文件总数、目录总数、字节数和最新 mtime。
+- `prefixes`：按顶层 prefix 聚合的文件数、字节数和最新 mtime。
+- `minio_internal`：`.minio.sys`、`.minio.sys/tmp/.trash`、`.minio.sys/multipart` 等重点内部目录的可见文件统计。
+- `largest_files` / `recent_files`：只含相对路径、size 和 mtime。
+
+这个 endpoint 只能说明容器内挂载目录当前 visible tree，不能说明 Hugging Face Storage Bucket 的 `info.size`、后端 Xet/CAS accounting 或 GC 是否收敛。为避免 dashboard 和 metrics 连续请求反复 walk `/data`，实现使用短进程内缓存，默认 TTL 为 15 秒。
 
 ## `.dockerignore`
 
@@ -405,6 +418,8 @@ ops 鉴权支持三种方式：
 - `Dockerfile` 的 Ubuntu build/runtime、upstream source build、`EXPOSE 7860` 和 healthcheck。
 - `hfs/start.sh` 的 Secret 校验、公开 URL 推导、Console redirect URL、ops/admin service 和 Nginx 配置预检。
 - `hfs/nginx.conf` 的 `7860` 监听、`/_ops/`、`/_admin/`、`/console/` 子路径、S3 根路径和 iframe header。
+- `hfs/ops_service.py` 的 `/_ops/storage` 路由和 storage metrics。
+- `scripts/sample-hf-bucket-storage.sh` 的存在性、可执行位、Bash 语法和 `hf`/`python3` 只读采样约束。
 - `LICENSE` 是否仍是 AGPL-3.0。
 - 如果本机安装了 `nginx`，运行 `nginx -t -c "$PWD/hfs/nginx.conf"`。
 
@@ -413,6 +428,42 @@ ops 鉴权支持三种方式：
 ```bash
 scripts/validate-contract.sh --remote
 ```
+
+## `scripts/sample-hf-bucket-storage.sh`
+
+这个脚本用于排查 Hugging Face Storage Bucket 的账面 size 和 visible tree 是否漂移。它是只读脚本，不删除、不覆盖、不重启 Space，也不读取 bucket 文件内容。
+
+默认 bucket：
+
+```text
+BlueSkyXN/libreFS-HFS-storage
+```
+
+可通过 `--bucket` 或 `HF_BUCKET_ID` 覆盖。默认 one-shot 输出一行 JSONL；需要连续采样时使用：
+
+```bash
+scripts/sample-hf-bucket-storage.sh \
+  --bucket BlueSkyXN/libreFS-HFS-storage \
+  --count 3 \
+  --interval 60
+```
+
+可选接入线上 ops visible tree：
+
+```bash
+OPS_TOKEN='<ops-token>' \
+scripts/sample-hf-bucket-storage.sh \
+  --bucket BlueSkyXN/libreFS-HFS-storage \
+  --ops-url https://blueskyxn-librefs-hfs.hf.space/_ops
+```
+
+脚本会调用：
+
+- `hf buckets info "$bucket" --json`
+- `hf buckets list "$bucket" -R --json`
+- 可选 `curl -H "X-Ops-Token: $OPS_TOKEN" "$ops_url/storage?format=json"`
+
+输出字段包括 `timestamp_utc`、`info_size`、`info_total_files`、`visible_sum`、`visible_files`、`drift_bytes`、`ops_visible_sum` 和 `largest_visible_file`。脚本用 `python3` 解析 JSON，不依赖 `jq`，也不会打印 `OPS_TOKEN`。
 
 ## `scripts/smoke-s3-curl.sh`
 

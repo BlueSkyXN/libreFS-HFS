@@ -62,7 +62,9 @@ check "whitespace and conflict-marker check" git diff --check -- \
 
 check "shell script syntax" bash -n hfs/start.sh
 bash -n scripts/smoke-s3-curl.sh
+bash -n scripts/sample-hf-bucket-storage.sh
 test -x scripts/smoke-s3-curl.sh
+test -x scripts/sample-hf-bucket-storage.sh
 
 check "Python service syntax" python3 -m py_compile hfs/ops_service.py hfs/admin_service.py
 
@@ -114,6 +116,16 @@ require_pattern hfs/start.sh 'ADMIN_ENABLED.*false' 'admin surface must default 
 check "S3 smoke script contract" require_pattern scripts/smoke-s3-curl.sh '--aws-sigv4' 'S3 smoke test must use curl SigV4 support'
 require_pattern scripts/smoke-s3-curl.sh 'Refusing to use bucket' 'S3 smoke test must refuse existing buckets'
 
+check "storage sampler script contract" test -f scripts/sample-hf-bucket-storage.sh
+require_pattern scripts/sample-hf-bucket-storage.sh 'hf buckets info "\$BUCKET" --json' 'storage sampler must read HF bucket accounting'
+require_pattern scripts/sample-hf-bucket-storage.sh 'hf buckets list "\$BUCKET" -R --json' 'storage sampler must read HF bucket visible tree'
+require_pattern scripts/sample-hf-bucket-storage.sh 'OPS_TOKEN' 'storage sampler must use OPS_TOKEN only for optional ops endpoint access'
+require_pattern scripts/sample-hf-bucket-storage.sh 'python3' 'storage sampler must parse JSON without jq'
+if grep -Eq '(^|[^[:alnum:]_])jq([^[:alnum:]_]|$)' scripts/sample-hf-bucket-storage.sh; then
+  echo "Contract check failed: storage sampler must not depend on jq" >&2
+  exit 1
+fi
+
 check "nginx routing contract" require_pattern hfs/nginx.conf 'listen 7860;' 'Nginx must listen on HF app port 7860'
 require_pattern hfs/nginx.conf 'location = /console' 'Nginx must normalize /console'
 require_pattern hfs/nginx.conf 'location = /_ops' 'Nginx must normalize /_ops'
@@ -132,6 +144,11 @@ require_pattern hfs/ops_service.py 'secret values are intentionally omitted' 'op
 require_pattern hfs/ops_service.py 'path in \{"/", ""\}.*query_token.*wants_html' 'query token must only bootstrap browser login at /_ops/'
 require_pattern hfs/ops_service.py 'redact_query_token' 'ops service logs must redact query token values'
 require_pattern hfs/ops_service.py 'Referrer-Policy' 'ops responses must suppress browser referrer leakage'
+require_pattern hfs/ops_service.py 'def storage_payload' 'ops service must expose a storage payload helper'
+require_pattern hfs/ops_service.py 'path == "/storage"' 'ops service must route /_ops/storage'
+require_pattern hfs/ops_service.py 'librefs_hfs_data_visible_bytes' 'ops metrics must include visible DATA_DIR bytes'
+require_pattern hfs/ops_service.py 'librefs_hfs_data_prefix_bytes' 'ops metrics must include DATA_DIR prefix bytes'
+require_pattern hfs/ops_service.py 'librefs_hfs_data_minio_internal_bytes' 'ops metrics must include MinIO internal area bytes'
 require_pattern hfs/admin_service.py 'ADMIN_ENABLED.*false' 'admin service must default to disabled'
 require_pattern hfs/admin_service.py 'confirm=true is required' 'admin write action must require explicit confirm'
 
