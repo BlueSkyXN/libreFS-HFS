@@ -15,6 +15,10 @@ ADMIN_ENABLED="${ADMIN_ENABLED:-false}"
 ADMIN_HOST="${ADMIN_HOST:-127.0.0.1}"
 ADMIN_PORT="${ADMIN_PORT:-8082}"
 ADMIN_AUDIT_LOG="${ADMIN_AUDIT_LOG:-/tmp/librefs-hfs/admin-audit.jsonl}"
+# Source evidence is part of the image, not a runtime configuration surface.
+# Do not allow Space Settings or an object under /data to redirect this check.
+HFS_BUILD_SOURCE_PATH="/usr/share/librefs-hfs/BUILD_SOURCE.json"
+HFS_BUILD_CHECKSUMS_PATH="/usr/share/librefs-hfs/SHA256SUMS"
 
 export DATA_DIR
 export LIBREFS_API_ADDR
@@ -27,6 +31,58 @@ export ADMIN_ENABLED
 export ADMIN_HOST
 export ADMIN_PORT
 export ADMIN_AUDIT_LOG
+export HFS_BUILD_SOURCE_PATH
+export HFS_BUILD_CHECKSUMS_PATH
+
+if [[ ! -r "$HFS_BUILD_SOURCE_PATH" || ! -r "$HFS_BUILD_CHECKSUMS_PATH" ]]; then
+  echo "Missing immutable wrapper provenance evidence" >&2
+  exit 1
+fi
+
+python3 - "$HFS_BUILD_SOURCE_PATH" "$HFS_BUILD_CHECKSUMS_PATH" "${LIBREFS_COMMIT:-}" <<'PY'
+import hashlib
+import json
+import re
+import sys
+
+source_path, checksums_path, runtime_librefs_commit = sys.argv[1:]
+try:
+    with open(source_path, "rb") as handle:
+        source_bytes = handle.read()
+    with open(source_path, "r", encoding="utf-8") as handle:
+        evidence = json.load(handle)
+    with open(checksums_path, "r", encoding="utf-8") as handle:
+        checksums = dict(
+            line.strip().replace("*", "", 1).split(maxsplit=1)
+            for line in handle
+            if line.strip()
+        )
+except (OSError, ValueError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"Invalid immutable wrapper provenance evidence: {exc}")
+
+if checksums.get("BUILD_SOURCE.json") != hashlib.sha256(source_bytes).hexdigest():
+    raise SystemExit("Immutable wrapper source evidence checksum does not match")
+if (
+    evidence.get("schema_version") != 1
+    or evidence.get("source_kind") != "commit"
+    or not re.fullmatch(r"[0-9a-f]{40}", str(evidence.get("source_commit", "")))
+    or not re.fullmatch(r"[0-9a-f]{40}", str(evidence.get("librefs_source_commit", "")))
+    or evidence.get("source_repository") != "https://github.com/BlueSkyXN/libreFS-HFS.git"
+    or evidence.get("upstream_source_ref_env") != "LIBREFS_COMMIT"
+):
+    raise SystemExit("Immutable wrapper source evidence does not satisfy the HFS source contract")
+if evidence["librefs_source_commit"] != runtime_librefs_commit:
+    raise SystemExit("Immutable wrapper provenance does not match the runtime libreFS commit")
+PY
+
+if [[ "${HFS_RELEASE_BUILD:-true}" != "true" ]]; then
+  echo "Bundle-only runtime requires HFS_RELEASE_BUILD=true" >&2
+  exit 1
+fi
+if ! [[ "${LIBREFS_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "Bundle-only runtime requires LIBREFS_COMMIT to be a 40-character lowercase commit SHA" >&2
+  exit 1
+fi
 
 if [[ -n "${PUBLIC_BASE_URL:-}" ]]; then
   public_base="${PUBLIC_BASE_URL%/}"

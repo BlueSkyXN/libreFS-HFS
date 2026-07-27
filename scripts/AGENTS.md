@@ -1,29 +1,30 @@
 # scripts navigation card
 
-`scripts/` 放本仓库的验证和线上 smoke 工具。修改脚本前先读根 `AGENTS.md`、目标脚本和相关 docs；这些脚本会被文档和人工运维直接引用。
+`scripts/` contains repository validation and live smoke tools used by docs and manual operations.
+Read this card before changing script flags, credential handling, cleanup behavior, or remote checks.
+Key files: `validate-contract.sh` for non-live contract checks, `smoke-s3-curl.sh` for credentialed S3 validation.
 
 ## Why this is high-risk
 
-- `validate-contract.sh` 是仓库契约检查入口，误删 pattern 会让部署漂移漏检。
-- `smoke-s3-curl.sh` 会对线上 S3-compatible endpoint 创建 bucket/object、设置 bucket policy 并清理资源。
-- 脚本可能使用真实 root credentials，但不得打印或提交 secret value。
+- `validate-contract.sh` is the main drift detector for README front matter, Dockerfile, HFS manifest, runtime glue, Nginx routing, ops/admin safety, and license.
+- `smoke-s3-curl.sh` creates a temporary bucket/object, applies bucket policy, verifies reads, and cleans up against the configured endpoint.
+- Scripts may receive real root credentials through environment variables; they must not print or persist secret values.
 
 ## Local rules
 
-- 保持 `set -Eeuo pipefail`。
-- `validate-contract.sh` 只能做契约检查，不安装依赖、不本地编译 libreFS；远端检查必须保留在显式 `--remote` 后。
-- `smoke-s3-curl.sh` 必须继续使用 `curl --aws-sigv4`，并在 bucket 非 404 时拒绝复用，避免误删用户数据。
-- 新增脚本参数时同步 `usage()`、`docs/operations.md` 和 `docs/source-walkthrough.md`。
-- 所有临时文件必须用 `mktemp` 或安全临时目录，并通过 trap 清理。
+- Keep `set -Eeuo pipefail`.
+- `validate-contract.sh` must stay lightweight: no dependency install, no local upstream libreFS build, no mutating HF commands. Remote checks stay behind explicit `--remote`.
+- `smoke-s3-curl.sh` must keep `curl --aws-sigv4`, reject existing buckets, use generated temporary names by default, and clean up with `trap`.
+- New flags or environment variables require updates to `usage()`, `docs/operations.md`, and `docs/source-walkthrough.md`.
 
 ## Do not
 
-- 不要把 root credentials、ops/admin token 或响应里的 secret value echo 到日志。
-- 不要默认执行 mutating HF CLI 命令，例如 `hf spaces secrets add`、`variables add`、`volumes set`、`restart`。
-- 不要让 smoke 脚本默认使用固定 bucket 名，除非用户显式设置并已确认可覆盖。
+- Do not echo root credentials, ops/admin tokens, signed URLs, or secret-bearing response bodies.
+- Do not make mutating HF CLI calls by default: `secrets add`, `variables add`, `volumes set`, `restart`, or `git push hf main`.
+- Do not let smoke tests reuse fixed bucket names unless the user explicitly confirms the target is disposable.
 
 ## Validation
 
-- 语法：`bash -n scripts/validate-contract.sh scripts/smoke-s3-curl.sh`。
-- 契约：`scripts/validate-contract.sh`。
-- 凭证型 S3 smoke 只在用户明确授权线上验收时运行：`MINIO_ROOT_USER=... MINIO_ROOT_PASSWORD=... scripts/smoke-s3-curl.sh`。
+- `bash -n scripts/validate-contract.sh scripts/smoke-s3-curl.sh`
+- `scripts/validate-contract.sh`
+- Credentialed live smoke only with explicit user authorization: `MINIO_ROOT_USER=... MINIO_ROOT_PASSWORD=... scripts/smoke-s3-curl.sh`

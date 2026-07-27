@@ -7,7 +7,7 @@ LibreFS HFS 是 libreFS 的 Hugging Face Docker Space 部署包装层。包装�
 
 本项目用 Nginx 监听 `7860`，把外部单端口流量分发到 S3 API、Web Console、只读 ops-service 和默认关闭的 admin-service。
 
-按本机 HFS 开发范式，本仓库是 Pattern A（HFS Port Repository）：仓库根目录仍是 Hugging Face Space root，同时也是 GitHub 维护 root；多服务 runtime glue 集中在 `hfs/` 下。
+按 HFS v2 开发范式，本仓库是 Pattern A 的 `port` / `source` 项目：仓库根目录仍是 Hugging Face Space root，同时也是 GitHub 维护 root；多服务 runtime glue 集中在 `hfs/` 下。受控发布从不可变 wrapper commit 导出最小 bundle，再由 Space build 从明确的 libreFS upstream commit 编译；没有 artifact 下载、config seed 或 HFS dist 运行依赖。
 
 ## 组件
 
@@ -20,6 +20,7 @@ LibreFS HFS 是 libreFS 的 Hugging Face Docker Space 部署包装层。包装�
 | 管理面 | `hfs/admin_service.py` | 默认关闭；开启后提供 status、action catalog、run-health-checks 和 reload-nginx。 |
 | 数据目录 | `/data` | libreFS 对象数据和元数据目录。 |
 | Space 元数据 | `README.md` | 声明 `sdk: docker`、`app_port: 7860` 等 HF Space 信息。 |
+| Wrapper provenance | `BUILD_SOURCE.json` | 只在 allowlisted delivery bundle 中生成并由 Docker image 保留；同时记录 wrapper immutable commit 与 libreFS source commit，不含 Settings 或凭证。 |
 
 ## 构建流程
 
@@ -28,8 +29,8 @@ flowchart TD
   A["HF Space build starts"] --> B["ubuntu:24.04 builder stage"]
   B --> C["Install ca-certificates, curl, git, tar"]
   C --> D["Download Go tarball"]
-  D --> E["Fetch libreFS ref or pinned commit"]
-  E --> F["LIBREFS_COMMIT checkout verification"]
+  D --> E["Fetch bundle-recorded libreFS commit"]
+  E --> F["LIBREFS_COMMIT provenance and checkout verification"]
   F --> G["go build -> /out/librefs"]
   G --> H["ubuntu:24.04 runtime stage"]
   H --> I["Install bash, ca-certificates, curl, nginx, python3, tini"]

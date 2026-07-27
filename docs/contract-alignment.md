@@ -22,13 +22,14 @@
 | 契约点 | 当前事实 | 权威来源 | 文档同步位置 |
 | --- | --- | --- | --- |
 | Space 类型 | Docker Space，`app_port: 7860`，`license: agpl-3.0` | `README.md` front matter | `README.md`, `docs/configuration.md`, `docs/deployment-huggingface.md` |
-| HFS 范式分类 | Pattern A / HFS Port Repository；repo root 同时是 Space root 和 GitHub 维护 root，runtime glue 收在 `hfs/` | `hfs-dev.toml`, `README.md`, `Dockerfile`, `hfs/` | `README.md`, `docs/architecture.md`, `docs/source-walkthrough.md`, `AGENTS.md` |
-| Runtime 获取模式 | `source-fetch`；Docker build 阶段从 libreFS upstream `git fetch` 源码并编译 | `hfs-dev.toml`, `Dockerfile` | `README.md`, `docs/architecture.md`, `docs/development-plan.md` |
+| HFS 范式分类 | HFS v2 Pattern A / `port` / `source`；`version_source=commit`，repo root 同时是 Space root 和 GitHub 维护 root，runtime glue 收在 `hfs/` | `hfs-dev.toml`, `README.md`, `Dockerfile`, `hfs/` | `README.md`, `docs/architecture.md`, `docs/source-walkthrough.md`, `AGENTS.md` |
+| Runtime 获取模式 | `bundle-only-build`；Docker build 只能从 clean wrapper bundle 读取 provenance，并从 libreFS upstream `git fetch` 其记录的 source commit 后编译 | `hfs-dev.toml`, `Dockerfile` | `README.md`, `docs/architecture.md`, `docs/development-plan.md` |
+| Source wrapper provenance | 受控发布只上传由 clean immutable wrapper commit 导出的 allowlisted bundle；`BUILD_SOURCE.json` 和 `SHA256SUMS` 被 Docker image 保存，startup 校验 wrapper SHA、libreFS source SHA、digest 和 schema，`/_ops/version` 只返回无密 provenance 摘要 | `scripts/export-space-bundle.sh`, `scripts/verify-space-bundle.sh`, `Dockerfile`, `hfs/start.sh`, `hfs/ops_service.py` | `README.md`, `docs/deployment-huggingface.md`, `docs/operations.md`, `docs/source-walkthrough.md` |
 | 外部端口 | 只暴露 `7860` | `Dockerfile` `EXPOSE 7860`，`hfs/nginx.conf` `listen 7860` | 全部 endpoint/port 文档 |
 | 构建策略 | Ubuntu builder/runtime，从 `https://github.com/libreFS/libreFS.git` 拉源码编译，不使用官方 image | `Dockerfile` | `README.md`, `docs/architecture.md`, `docs/source-walkthrough.md` |
 | Go 版本 | `GO_VERSION=1.26.3` | `Dockerfile` | `docs/configuration.md`, `docs/source-walkthrough.md`, `docs/deployment-huggingface.md` |
-| libreFS ref | 开发默认是 `LIBREFS_REF=master`、`LIBREFS_COMMIT=HEAD`；发布态必须设置具体 `LIBREFS_COMMIT=<upstream commit sha>`，Docker build 会直接 fetch/checkout 该 commit 并校验 `git rev-parse HEAD` | `Dockerfile`, `hfs-dev.toml` | `docs/configuration.md`, `docs/troubleshooting.md`, `docs/development-plan.md` |
-| Release hardening | 当前 release pin surface 只计入 upstream commit SHA；Go tarball checksum 和 Ubuntu base image digest 是后续 hardening backlog，不改当前 runtime | `hfs-dev.toml`, `Dockerfile` | `docs/configuration.md`, `docs/development-plan.md` |
+| libreFS ref | bundle-only build 必须同时使用 `HFS_RELEASE_BUILD=true`、`LIBREFS_COMMIT=<upstream commit sha>` 与 bundle 内相同的 `librefs_source_commit`；Docker build 会直接 fetch/checkout 并校验 `git rev-parse HEAD` | `Dockerfile`, `hfs-dev.toml` | `docs/configuration.md`, `docs/troubleshooting.md`, `docs/development-plan.md` |
+| Release hardening | HFS v2 registry不复制 product pin；受控 build 通过 `HFS_RELEASE_BUILD=true` + `LIBREFS_COMMIT=<40 位 SHA>` 固定 upstream。Go tarball checksum 和 Ubuntu base image digest仍是后续 hardening，不改当前 runtime | `Dockerfile`, `hfs-dev.toml` | `docs/configuration.md`, `docs/development-plan.md` |
 | Runtime packages | `bash`、`ca-certificates`、`curl`、`nginx`、`python3`、`tini` | `Dockerfile` | `docs/architecture.md`, `docs/source-walkthrough.md` |
 | Runtime user | UID/GID `1000`，存在则复用，不无条件创建 | `Dockerfile` | `docs/source-walkthrough.md`, `docs/troubleshooting.md` |
 | 必需启动 Secrets | 只有 `MINIO_ROOT_USER` 和 `MINIO_ROOT_PASSWORD` 缺失会让 `hfs/start.sh` 立即退出 | `hfs/start.sh` | `docs/configuration.md`, `docs/deployment-huggingface.md`, `docs/troubleshooting.md` |
@@ -56,7 +57,7 @@
 ## 文档维护规则
 
 1. 区分“代码默认值”和“当前生产配置”。例如 `ADMIN_ENABLED` 代码默认是 `false`，但当前生产是 `true`。
-2. 不把 Secret 明文写入文档。HF CLI 只能证明 key 存在；value 同步必须用本地 `.env.local` 的值调线上接口验证。
+2. 不把 Secret 明文写入文档。HF CLI 只能证明 key 存在；value 同步必须用受保护本机 `.env` 的值调线上接口验证。
 3. 不把 health check 写成 S3 功能验收。S3 写入、下载、policy 和匿名直链必须用凭证型 smoke test 验证。
 4. 不把 Volume 挂载写成持久化已验收。必须完成重启和 rebuild 后读回。
 5. 修改 `hfs/ops_service.py` 或 `hfs/admin_service.py` 时，同步检查 `docs/configuration.md`、`docs/operations.md`、`docs/architecture.md` 和本文档。

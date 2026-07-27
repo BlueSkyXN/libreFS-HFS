@@ -70,6 +70,20 @@ scripts/validate-contract.sh
 scripts/validate-contract.sh --remote
 ```
 
+`--remote` 会访问线上 endpoint，因此不属于离线门禁。source wrapper Docker build 同样会从 GitHub 获取 libreFS 上游源码；本地只记录为 skipped，不能把静态检查当作 build 成功。
+
+## HFS v2 source 交付证据
+
+一次受控发布至少要分别保留以下无密证据，且不要把任意一项替代另一项：
+
+1. **本地 contract**：`scripts/validate-contract.sh` 和共享 `check_hfs_alignment.py` 通过。
+2. **不可变 wrapper 来源**：导出的 `BUILD_SOURCE.json` 记录 GitHub wrapper 40 位 commit，`SHA256SUMS` 覆盖 bundle 输入，`scripts/verify-space-bundle.sh` 通过。
+3. **Space 写入 readback**：manual workflow 在写入前后都读取完整 Space tree；它只接受严格等于 wrapper allowlist 的远端文件集，写入后逐字节核对 `BUILD_SOURCE.json`、`SHA256SUMS` 及其覆盖的全部 wrapper 输入；这只证明仓库写入。
+4. **构建与运行**：由 owner 回读 Space build/runtime metadata、logs 和 `/minio/health/ready`；`/_ops/version` 中的 `wrapper_source`、`librefs_commit` 和 release gate 应与批准输入一致。
+5. **业务与数据**：以临时对象执行签名 S3 smoke，再做 restart、rebuild、读回、备份和隔离恢复。第 5 项会改变或访问实际数据，必须单独确认。
+
+不能直接 `git push hf main`、使用 credential-bearing Git URL、force-push 或 whole-repo delete 作为标准交付方式。旧路径只可作为 owner 明确批准的回退动作，不是本轮 workflow 的正常路径。
+
 ## Ops 诊断入口
 
 `/_ops/` 是只读诊断面，默认需要 `OPS_TOKEN`。公开长期运行建议在 HF Secrets 中覆盖默认 demo token。
@@ -447,8 +461,8 @@ HF Volume:
 
 1. 和代码默认值一致的内容不要配置成 HF Variables。
 2. upstream libreFS 默认值不要在 HF Variables 里重复声明。
-3. Secret 真实值只保存在 HF Secrets 和本地 `.env.local`，不要提交进仓库。
-4. `.env.local` 是本地台账，不是 runtime 自动加载文件；它用于记录默认值、覆盖候选和不能从 HF 回读的 secret value。
+3. Secret 真实值只保存在 HF Secrets 和受保护本机的 `.env`，不要提交进仓库。
+4. `.env` 是本地台账，不是 runtime 自动加载文件；它用于记录默认值、覆盖候选和不能从 HF 回读的 secret value。旧 `.env.local` 仅保留 ignore 兼容，迁移必须由 owner 完成。
 5. 只有自定义域名、临时排障、临时切 upstream ref、明确 commit pin，或需要把非业务日志移出 `/data` 时，才新增 HF Variables。
 
 检查云端是否保持精简：
@@ -467,7 +481,7 @@ secrets: MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, OPS_TOKEN
 volume: BlueSkyXN/librefs-hfs-data -> /data
 ```
 
-当前生产启用了 admin，显式把 `ADMIN_AUDIT_LOG` 指到 `/tmp/librefs-hfs/admin-audit.jsonl`，并且当前回读到一个具体 `LIBREFS_COMMIT` 发布 pin，因此 `variables` 不应为空，`secrets` 也应包含 `ADMIN_TOKEN`。HF CLI 不回显 Secret value，只能回读 key；需要确认 value 是否同步时，用本地 `.env.local` 的 token 调线上 `/_ops/` 或 `/_admin/` 验证。
+当前生产启用了 admin，显式把 `ADMIN_AUDIT_LOG` 指到 `/tmp/librefs-hfs/admin-audit.jsonl`，并且当前回读到一个具体 `LIBREFS_COMMIT` 发布 pin，因此 `variables` 不应为空，`secrets` 也应包含 `ADMIN_TOKEN`。HF CLI 不回显 Secret value，只能回读 key；需要确认 value 是否同步时，用受保护本机 `.env` 的 token 调线上 `/_ops/` 或 `/_admin/` 验证。
 
 ## 持久化检查
 
