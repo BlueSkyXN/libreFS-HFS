@@ -1,0 +1,28 @@
+name: HFS contract
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate repository contract
+        run: scripts/validate-contract.sh
+      - name: Export and verify exact-head bundle
+        run: |
+          set -euo pipefail
+          scripts/export-space-bundle.sh \
+            --source-commit "$GITHUB_SHA" \
+            --librefs-source-commit e194bd779f36fdc08f310d2819d9356f0c1f991b \
+            --output "$RUNNER_TEMP/librefs-hfs-space"
+          scripts/verify-space-bundle.sh --bundle "$RUNNER_TEMP/librefs-hfs-space"
