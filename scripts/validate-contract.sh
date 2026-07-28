@@ -127,6 +127,7 @@ require_pattern Dockerfile 'git checkout --detach "\$\{LIBREFS_COMMIT\}"' 'relea
 require_pattern Dockerfile 'test "\$\(git rev-parse HEAD\)" = "\$\{LIBREFS_COMMIT\}"' 'release builds must verify the upstream checkout'
 require_pattern Dockerfile 'COPY --chmod=0444 BUILD_SOURCE\.json /usr/share/librefs-hfs/BUILD_SOURCE\.json' 'runtime must retain immutable wrapper source evidence'
 require_pattern Dockerfile 'COPY --chmod=0444 SHA256SUMS /usr/share/librefs-hfs/SHA256SUMS' 'runtime must retain wrapper source checksums'
+require_pattern Dockerfile 'stat -c %a /usr/share/librefs-hfs/BUILD_SOURCE.json' 'runtime image must verify provenance file modes explicitly'
 require_pattern Dockerfile '^EXPOSE 7860$' 'container must expose only the HF app port'
 require_pattern Dockerfile 'http://127\.0\.0\.1:7860/minio/health/ready' 'healthcheck must use the public Nginx port'
 if grep -Eq '^\s*COPY\s+\.\s+' Dockerfile; then

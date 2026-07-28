@@ -98,6 +98,13 @@ RUN set -eux; \
 COPY --from=builder --chmod=0755 /out/librefs /usr/local/bin/librefs
 COPY --chmod=0444 BUILD_SOURCE.json /usr/share/librefs-hfs/BUILD_SOURCE.json
 COPY --chmod=0444 SHA256SUMS /usr/share/librefs-hfs/SHA256SUMS
+RUN set -eux; \
+    chown -R "${APP_UID}:${APP_GID}" /usr/share/librefs-hfs; \
+    chmod 0555 /usr/share/librefs-hfs; \
+    chmod 0444 /usr/share/librefs-hfs/BUILD_SOURCE.json /usr/share/librefs-hfs/SHA256SUMS; \
+    test "$(stat -c %a /usr/share/librefs-hfs)" = 555; \
+    test "$(stat -c %a /usr/share/librefs-hfs/BUILD_SOURCE.json)" = 444; \
+    test "$(stat -c %a /usr/share/librefs-hfs/SHA256SUMS)" = 444
 COPY --chmod=0644 hfs/ops_service.py /usr/local/bin/librefs-ops-service.py
 COPY --chmod=0644 hfs/admin_service.py /usr/local/bin/librefs-admin-service.py
 COPY --chmod=0644 hfs/nginx.conf /etc/nginx/nginx.conf
