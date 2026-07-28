@@ -79,7 +79,7 @@ from pathlib import Path
 
 for source_path in sys.argv[1:]:
     compile(Path(source_path).read_text(encoding="utf-8"), source_path, "exec")
-' hfs/ops_service.py hfs/admin_service.py
+' hfs/ops_service.py hfs/admin_service.py scripts/presign-s3-request.py
 
 check "README front matter" require_pattern README.md '^sdk: docker$' 'README.md must keep sdk: docker'
 require_pattern README.md '^app_port: 7860$' 'README.md must keep app_port: 7860'
@@ -199,7 +199,8 @@ PY
 '
 
 check "S3 smoke script contract" require_pattern scripts/smoke-s3-curl.sh '--aws-sigv4' 'S3 smoke test must use curl SigV4 support'
-require_pattern scripts/smoke-s3-curl.sh 'X-HF-Authorization: Bearer' 'private candidate S3 smoke must support separate HF gateway auth'
+require_pattern scripts/smoke-s3-curl.sh 'presign-s3-request\.py' 'private candidate S3 smoke must use query signing'
+require_pattern scripts/smoke-s3-curl.sh 'Authorization: Bearer' 'private candidate S3 smoke must authenticate to the HF gateway'
 require_pattern scripts/smoke-s3-curl.sh 'Refusing to use bucket' 'S3 smoke test must refuse existing buckets'
 
 check "storage sampler script contract" test -f scripts/sample-hf-bucket-storage.sh
@@ -217,6 +218,7 @@ require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:9001/;' 'Console 
 require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:9000;' 'S3 API must stay at the root path'
 require_pattern hfs/nginx.conf 'proxy_set_header X-HF-Authorization "";' 'S3 proxy must strip the private Space gateway header before SigV4 verification'
 require_pattern hfs/nginx.conf 'proxy_set_header X-Amzn-Trace-Id "";' 'S3 proxy must strip platform trace headers added after SigV4 signing'
+require_pattern hfs/nginx.conf 'proxy_set_header Authorization \$s3_authorization;' 'S3 proxy must strip only HF Bearer auth while preserving header SigV4'
 require_pattern hfs/nginx.conf 'proxy_hide_header X-Frame-Options;' 'Console proxy must hide upstream X-Frame-Options'
 
 check "ops/admin service contract" require_pattern hfs/ops_service.py 'SECRET_KEYS' 'ops service must summarize secret presence only'
