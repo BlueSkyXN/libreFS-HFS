@@ -160,7 +160,7 @@ check "source bundle verifier fixture" bash -c '
   trap "rm -rf \"$tmp_dir\"" EXIT
   bundle="$tmp_dir/bundle"
   mkdir -p "$bundle/hfs"
-  cp README.md Dockerfile LICENSE hfs-dev.toml .dockerignore "$bundle/"
+  cp README.md Dockerfile LICENSE hfs-dev.toml .dockerignore .gitattributes "$bundle/"
   cp hfs/start.sh hfs/nginx.conf hfs/ops_service.py hfs/admin_service.py "$bundle/hfs/"
   python3 - "$bundle/BUILD_SOURCE.json" <<"PY"
 import json
@@ -179,9 +179,9 @@ PY
   (
     cd "$bundle"
     if command -v sha256sum >/dev/null 2>&1; then
-      sha256sum README.md Dockerfile LICENSE hfs-dev.toml .dockerignore hfs/start.sh hfs/nginx.conf hfs/ops_service.py hfs/admin_service.py BUILD_SOURCE.json > SHA256SUMS
+      sha256sum README.md Dockerfile LICENSE hfs-dev.toml .dockerignore .gitattributes hfs/start.sh hfs/nginx.conf hfs/ops_service.py hfs/admin_service.py BUILD_SOURCE.json > SHA256SUMS
     else
-      shasum -a 256 README.md Dockerfile LICENSE hfs-dev.toml .dockerignore hfs/start.sh hfs/nginx.conf hfs/ops_service.py hfs/admin_service.py BUILD_SOURCE.json > SHA256SUMS
+      shasum -a 256 README.md Dockerfile LICENSE hfs-dev.toml .dockerignore .gitattributes hfs/start.sh hfs/nginx.conf hfs/ops_service.py hfs/admin_service.py BUILD_SOURCE.json > SHA256SUMS
     fi
   )
   scripts/verify-space-bundle.sh --bundle "$bundle"

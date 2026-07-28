@@ -42,6 +42,7 @@ required_paths=(
   LICENSE
   hfs-dev.toml
   .dockerignore
+  .gitattributes
   hfs/start.sh
   hfs/nginx.conf
   hfs/ops_service.py

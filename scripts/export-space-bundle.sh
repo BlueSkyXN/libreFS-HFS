@@ -103,6 +103,7 @@ bundle_paths=(
   LICENSE
   "$MANIFEST"
   .dockerignore
+  .gitattributes
   hfs/start.sh
   hfs/nginx.conf
   hfs/ops_service.py
@@ -146,10 +147,10 @@ PY
 (
   cd "$OUTPUT_DIR"
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum README.md Dockerfile LICENSE hfs-dev.toml .dockerignore \
+    sha256sum README.md Dockerfile LICENSE hfs-dev.toml .dockerignore .gitattributes \
       hfs/start.sh hfs/nginx.conf hfs/ops_service.py hfs/admin_service.py BUILD_SOURCE.json > SHA256SUMS
   else
-    shasum -a 256 README.md Dockerfile LICENSE hfs-dev.toml .dockerignore \
+    shasum -a 256 README.md Dockerfile LICENSE hfs-dev.toml .dockerignore .gitattributes \
       hfs/start.sh hfs/nginx.conf hfs/ops_service.py hfs/admin_service.py BUILD_SOURCE.json > SHA256SUMS
   fi
 )
