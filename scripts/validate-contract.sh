@@ -86,9 +86,11 @@ require_pattern README.md '^app_port: 7860$' 'README.md must keep app_port: 7860
 require_pattern README.md '^license: agpl-3.0$' 'README.md must keep license: agpl-3.0'
 
 check "HFS v2 semantic registry" test -f hfs-dev.toml
+test -f hfs-dev.candidate.toml
 require_pattern hfs-dev.toml '^standard = "2\.0"$' 'manifest must use HFS standard 2.0'
 require_pattern hfs-dev.toml '^project = "librefs-hfs"$' 'manifest must declare the wrapper project'
 require_pattern hfs-dev.toml '^space = "BlueSkyXN/libreFS-HFS"$' 'manifest must declare the target Space'
+require_pattern hfs-dev.candidate.toml '^space = "BlueSkyXN/libreFS-HFS-v2-candidate"$' 'candidate manifest must declare the private candidate Space'
 require_pattern hfs-dev.toml '^sovereignty = "port"$' 'libreFS-HFS must remain a port wrapper'
 require_pattern hfs-dev.toml '^lane = "source"$' 'libreFS-HFS must remain in the source lane'
 require_pattern hfs-dev.toml '^version_source = "commit"$' 'manifest must declare commit-based production provenance'
@@ -227,6 +229,8 @@ fi
 check "manual deployment workflow" test -f .github/workflows/deploy-hf-space.yml
 require_pattern .github/workflows/deploy-hf-space.yml 'workflow_dispatch:' 'Space deployment must be manually dispatched'
 require_pattern .github/workflows/deploy-hf-space.yml 'confirm_release' 'Space deployment must require explicit confirmation'
+require_pattern .github/workflows/deploy-hf-space.yml 'options: \[candidate, production\]' 'Space deployment must use fixed manifest-owned targets'
+require_pattern .github/workflows/deploy-hf-space.yml 'hfs-dev\.candidate\.toml' 'Space deployment must select the candidate manifest explicitly'
 require_pattern .github/workflows/deploy-hf-space.yml 'scripts/export-space-bundle\.sh' 'workflow must export the wrapper boundary'
 require_pattern .github/workflows/deploy-hf-space.yml 'scripts/verify-space-bundle\.sh' 'workflow must verify the wrapper boundary'
 require_pattern .github/workflows/deploy-hf-space.yml 'Refuse a Space repository outside the wrapper boundary' 'workflow must fail closed on legacy Space files'

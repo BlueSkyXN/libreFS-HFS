@@ -3,6 +3,12 @@ name: Deploy verified LibreFS HFS wrapper
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: "Manifest-owned deployment target"
+        required: true
+        default: candidate
+        type: choice
+        options: [candidate, production]
       confirm_release:
         description: "Type RELEASE to confirm the Space write"
         required: true
@@ -20,14 +26,13 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SPACE_ID: BlueSkyXN/libreFS-HFS
   HF_CLI_VERSION: "1.5.0"
 
 jobs:
   deploy:
     if: ${{ inputs.confirm_release == 'RELEASE' }}
     runs-on: ubuntu-24.04
-    environment: hfs-production
+    environment: ${{ inputs.target == 'candidate' && 'hfs-candidate' || 'hfs-production' }}
     steps:
       - name: Check out the immutable wrapper commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -38,21 +43,30 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           LIBREFS_COMMIT: ${{ inputs.librefs_commit }}
+          HFS_MANIFEST: ${{ inputs.target == 'candidate' && 'hfs-dev.candidate.toml' || 'hfs-dev.toml' }}
         run: |
           set -Eeuo pipefail
           [[ "$LIBREFS_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          SPACE_ID="$(python3 -c 'import os,tomllib; print(tomllib.load(open(os.environ["HFS_MANIFEST"], "rb"))["space"])')"
+          echo "SPACE_ID=$SPACE_ID" >> "$GITHUB_ENV"
           python3 -m pip install --disable-pip-version-check "huggingface_hub==${HF_CLI_VERSION}"
+          if [[ "${{ inputs.target }}" == candidate ]]; then
+            test "$(hf spaces info "$SPACE_ID" --expand private --json | python3 -c 'import json,sys; print(str(json.load(sys.stdin)["private"]).lower())')" = true
+          fi
           configured_variables="$(hf spaces variables list "$SPACE_ID")"
           grep -F "LIBREFS_COMMIT" <<<"$configured_variables" >/dev/null
           grep -F "$LIBREFS_COMMIT" <<<"$configured_variables" >/dev/null
           grep -E 'HFS_RELEASE_BUILD.*true|true.*HFS_RELEASE_BUILD' <<<"$configured_variables" >/dev/null
 
       - name: Export and verify the allowlisted Space wrapper
+        env:
+          HFS_MANIFEST: ${{ inputs.target == 'candidate' && 'hfs-dev.candidate.toml' || 'hfs-dev.toml' }}
         run: |
           set -Eeuo pipefail
           scripts/export-space-bundle.sh \
             --source-commit "$GITHUB_SHA" \
             --librefs-source-commit "$LIBREFS_COMMIT" \
+            --manifest "$HFS_MANIFEST" \
             --output "$RUNNER_TEMP/librefs-hfs-space-bundle"
           scripts/verify-space-bundle.sh --bundle "$RUNNER_TEMP/librefs-hfs-space-bundle"
 

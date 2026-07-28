@@ -5,10 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE_COMMIT=""
 LIBREFS_SOURCE_COMMIT=""
 OUTPUT_DIR=""
+MANIFEST="hfs-dev.toml"
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/export-space-bundle.sh --output <empty-directory> --librefs-source-commit <commit> [--source-commit <commit>]
+Usage: scripts/export-space-bundle.sh --output <empty-directory> --librefs-source-commit <commit> [--source-commit <commit>] [--manifest <profile>]
 
 Export the minimal LibreFS HFS source wrapper for a manual, confirmed Space
 release. The exporter only accepts a clean checkout at the exact immutable
@@ -19,6 +20,7 @@ Options:
   --output <dir>                  New or empty output directory for the bundle.
   --source-commit <sha>           Exact wrapper commit. Defaults to HEAD.
   --librefs-source-commit <sha>   Exact libreFS commit that Docker must compile.
+  --manifest <profile>            hfs-dev.toml or hfs-dev.candidate.toml.
   -h, --help              Show this help.
 USAGE
 }
@@ -37,6 +39,10 @@ while [[ $# -gt 0 ]]; do
       LIBREFS_SOURCE_COMMIT="${2:-}"
       shift 2
       ;;
+    --manifest)
+      MANIFEST="${2:-}"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -48,6 +54,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+case "$MANIFEST" in
+  hfs-dev.toml|hfs-dev.candidate.toml) ;;
+  *) echo "--manifest must be hfs-dev.toml or hfs-dev.candidate.toml." >&2; exit 2 ;;
+esac
 
 if [[ -z "$OUTPUT_DIR" ]]; then
   echo "--output is required." >&2
@@ -90,7 +101,7 @@ bundle_paths=(
   README.md
   Dockerfile
   LICENSE
-  hfs-dev.toml
+  "$MANIFEST"
   .dockerignore
   hfs/start.sh
   hfs/nginx.conf
@@ -106,6 +117,9 @@ for path in "${bundle_paths[@]}"; do
 done
 
 git archive --format=tar "$SOURCE_COMMIT" -- "${bundle_paths[@]}" | tar -x -C "$OUTPUT_DIR"
+if [[ "$MANIFEST" != "hfs-dev.toml" ]]; then
+  mv "$OUTPUT_DIR/$MANIFEST" "$OUTPUT_DIR/hfs-dev.toml"
+fi
 
 SOURCE_COMMIT="$SOURCE_COMMIT" LIBREFS_SOURCE_COMMIT="$LIBREFS_SOURCE_COMMIT" OUTPUT_DIR="$OUTPUT_DIR" python3 - <<'PY'
 import json

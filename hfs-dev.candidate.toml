@@ -1,0 +1,43 @@
+standard = "2.0"
+project = "librefs-hfs"
+space = "BlueSkyXN/libreFS-HFS-v2-candidate"
+sovereignty = "port"
+lane = "source"
+version_source = "commit"
+
+pattern = "A"
+runtime_mode = "bundle-only-build"
+space_root_mode = "repo-root"
+source_repository = "https://github.com/libreFS/libreFS.git"
+release_commit_env = "LIBREFS_COMMIT"
+release_gate_env = "HFS_RELEASE_BUILD"
+data_mount = "/data"
+canonical_health_endpoint = "/minio/health/ready"
+
+local_only = ["HF_TOKEN", "GH_TOKEN"]
+
+secrets = [
+  "MINIO_ROOT_USER",
+  "MINIO_ROOT_PASSWORD",
+  "OPS_TOKEN",
+  "ADMIN_TOKEN",
+]
+variables = [
+  "ADMIN_AUDIT_LOG",
+  "ADMIN_ENABLED",
+  "CONTROL_PLANE_DEFAULT_LANG",
+  "GO_VERSION",
+  "HFS_RELEASE_BUILD",
+  "LIBREFS_COMMIT",
+  "MINIO_API_CORS_ALLOW_ORIGIN",
+  "MINIO_API_ROOT_ACCESS",
+  "MINIO_BROWSER",
+  "MINIO_BROWSER_REDIRECT",
+  "MINIO_BROWSER_REDIRECT_URL",
+  "MINIO_CALLHOME_ENABLE",
+  "MINIO_SERVER_URL",
+  "MINIO_SITE_NAME",
+  "MINIO_SITE_REGION",
+  "MINIO_UPDATE",
+  "PUBLIC_BASE_URL",
+]
