@@ -83,10 +83,14 @@ jobs:
             exit 1
           fi
           actual_paths="$(cd "$preflight_dir" && find . -type f ! -path './.cache/huggingface/*' -print | LC_ALL=C sort | cut -c3-)"
-          if [[ "$actual_paths" != "$expected_paths" ]]; then
+          unexpected_paths="$(comm -23 \
+            <(printf '%s\n' "$actual_paths") \
+            <(printf '%s\n' "$expected_paths"))"
+          if [[ -n "$unexpected_paths" ]]; then
             printf '%s\n%s\n' \
-              'Refusing to upload: the current Space repository is not exactly the verified wrapper boundary.' \
+              'Refusing to upload: the current Space repository contains files outside the verified wrapper boundary.' \
               'This workflow never deletes legacy files. Migrate to a clean Space repository or perform a separately approved, reviewed cleanup before retrying.' >&2
+            printf 'Unexpected path: %s\n' "$unexpected_paths" >&2
             exit 1
           fi
 
