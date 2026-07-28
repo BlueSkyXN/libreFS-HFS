@@ -216,6 +216,7 @@ require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:8082/;' 'Nginx mu
 require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:9001/;' 'Console proxy_pass must strip /console/ prefix'
 require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:9000;' 'S3 API must stay at the root path'
 require_pattern hfs/nginx.conf 'proxy_set_header X-HF-Authorization "";' 'S3 proxy must strip the private Space gateway header before SigV4 verification'
+require_pattern hfs/nginx.conf 'proxy_set_header X-Amzn-Trace-Id "";' 'S3 proxy must strip platform trace headers added after SigV4 signing'
 require_pattern hfs/nginx.conf 'proxy_hide_header X-Frame-Options;' 'Console proxy must hide upstream X-Frame-Options'
 
 check "ops/admin service contract" require_pattern hfs/ops_service.py 'SECRET_KEYS' 'ops service must summarize secret presence only'
