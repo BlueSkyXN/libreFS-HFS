@@ -199,6 +199,7 @@ PY
 '
 
 check "S3 smoke script contract" require_pattern scripts/smoke-s3-curl.sh '--aws-sigv4' 'S3 smoke test must use curl SigV4 support'
+require_pattern scripts/smoke-s3-curl.sh 'X-HF-Authorization: Bearer' 'private candidate S3 smoke must support separate HF gateway auth'
 require_pattern scripts/smoke-s3-curl.sh 'Refusing to use bucket' 'S3 smoke test must refuse existing buckets'
 
 check "storage sampler script contract" test -f scripts/sample-hf-bucket-storage.sh
@@ -214,6 +215,7 @@ require_pattern hfs/nginx.conf 'location = /_admin' 'Nginx must normalize /_admi
 require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:8082/;' 'Nginx must proxy admin service'
 require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:9001/;' 'Console proxy_pass must strip /console/ prefix'
 require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:9000;' 'S3 API must stay at the root path'
+require_pattern hfs/nginx.conf 'proxy_set_header X-HF-Authorization "";' 'S3 proxy must strip the private Space gateway header before SigV4 verification'
 require_pattern hfs/nginx.conf 'proxy_hide_header X-Frame-Options;' 'Console proxy must hide upstream X-Frame-Options'
 
 check "ops/admin service contract" require_pattern hfs/ops_service.py 'SECRET_KEYS' 'ops service must summarize secret presence only'

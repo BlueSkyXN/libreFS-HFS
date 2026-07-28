@@ -70,6 +70,11 @@ for required_curl_flag in '--aws-sigv4' '--fail-with-body'; do
   fi
 done
 
+hf_gateway_args=()
+if [[ -n "${HF_GATEWAY_TOKEN:-}" ]]; then
+  hf_gateway_args=(-H "X-HF-Authorization: Bearer ${HF_GATEWAY_TOKEN}")
+fi
+
 tmp_dir="$(mktemp -d)"
 payload_file="$tmp_dir/payload.txt"
 signed_download="$tmp_dir/signed-download.txt"
@@ -83,6 +88,7 @@ policy_applied=0
 
 signed_curl() {
   curl --silent --show-error --fail-with-body \
+    "${hf_gateway_args[@]}" \
     --aws-sigv4 "aws:amz:${REGION}:s3" \
     --user "${ACCESS_KEY}:${SECRET_KEY}" \
     "$@"
@@ -90,6 +96,7 @@ signed_curl() {
 
 signed_status() {
   curl --silent --show-error \
+    "${hf_gateway_args[@]}" \
     --aws-sigv4 "aws:amz:${REGION}:s3" \
     --user "${ACCESS_KEY}:${SECRET_KEY}" \
     -o "$status_body" \
@@ -156,7 +163,7 @@ if ! cmp -s "$payload_file" "$signed_download"; then
 fi
 
 echo "==> anonymous read is denied before policy"
-private_status="$(curl --silent --show-error -o "$private_body" -w '%{http_code}' "$ENDPOINT/$BUCKET/$OBJECT" || true)"
+private_status="$(curl --silent --show-error "${hf_gateway_args[@]}" -o "$private_body" -w '%{http_code}' "$ENDPOINT/$BUCKET/$OBJECT" || true)"
 if [[ "$private_status" != "403" ]]; then
   echo "Expected anonymous read HTTP 403 before policy, got $private_status" >&2
   exit 1
@@ -167,7 +174,7 @@ signed_curl -X PUT -H 'Content-Type: application/json' --data-binary @"$policy_f
 policy_applied=1
 
 echo "==> anonymous read succeeds after policy"
-curl --silent --show-error --fail-with-body "$ENDPOINT/$BUCKET/$OBJECT" -o "$public_download"
+curl --silent --show-error --fail-with-body "${hf_gateway_args[@]}" "$ENDPOINT/$BUCKET/$OBJECT" -o "$public_download"
 if ! cmp -s "$payload_file" "$public_download"; then
   echo "Public download content does not match uploaded payload." >&2
   exit 1
