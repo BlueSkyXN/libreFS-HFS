@@ -144,6 +144,7 @@ if grep -Eq 'HFS_BUILD_(SOURCE|CHECKSUMS)_PATH="\$\{' hfs/start.sh; then
   exit 1
 fi
 require_pattern hfs/start.sh 'Immutable wrapper source evidence checksum does not match' 'start.sh must fail closed on mismatched source evidence'
+require_pattern hfs/start.sh 'checksums\[name\] = digest' 'start.sh must index SHA256SUMS by filename'
 require_pattern hfs/start.sh 'Immutable wrapper source evidence does not satisfy the HFS source contract' 'start.sh must fail closed on invalid source evidence'
 require_pattern hfs/start.sh 'Bundle-only runtime requires LIBREFS_COMMIT' 'bundle runtime must fail closed without an immutable upstream pin'
 require_pattern hfs/start.sh 'librefs_source_commit' 'runtime must bind wrapper and libreFS source commits together'

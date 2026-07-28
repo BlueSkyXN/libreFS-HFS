@@ -51,12 +51,13 @@ try:
         source_bytes = handle.read()
     with open(source_path, "r", encoding="utf-8") as handle:
         evidence = json.load(handle)
+    checksums = {}
     with open(checksums_path, "r", encoding="utf-8") as handle:
-        checksums = dict(
-            line.strip().replace("*", "", 1).split(maxsplit=1)
-            for line in handle
-            if line.strip()
-        )
+        for line in handle:
+            if not line.strip():
+                continue
+            digest, name = line.strip().replace("*", "", 1).split(maxsplit=1)
+            checksums[name] = digest
 except (OSError, ValueError, json.JSONDecodeError) as exc:
     raise SystemExit(f"Invalid immutable wrapper provenance evidence: {exc}")
 
