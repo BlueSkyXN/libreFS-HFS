@@ -1,14 +1,10 @@
 standard = "2.0"
 project = "librefs-hfs"
-space = "BlueSkyXN/libreFS-HFS"
+space = "BlueSkyXN/libreFS-HFS-v2-candidate"
 sovereignty = "port"
 lane = "source"
 version_source = "commit"
 
-# This is a semantic registry only. Dockerfile and hfs/start.sh remain the
-# authoritative locations for the upstream pin validation and runtime rules.
-# Every production build is exported as a minimal wrapper bundle and compiles
-# the one immutable libreFS commit recorded in that bundle's provenance.
 pattern = "A"
 runtime_mode = "bundle-only-build"
 space_root_mode = "repo-root"
@@ -18,12 +14,8 @@ release_gate_env = "HFS_RELEASE_BUILD"
 data_mount = "/data"
 canonical_health_endpoint = "/minio/health/ready"
 
-# These controls stay local or in protected GitHub Action configuration; they
-# are never copied to the Space as runtime settings.
 local_only = ["HF_TOKEN", "GH_TOKEN"]
 
-# Names only: values belong in the ignored local .env or the corresponding
-# Hugging Face Space Settings surface.
 secrets = [
   "MINIO_ROOT_USER",
   "MINIO_ROOT_PASSWORD",

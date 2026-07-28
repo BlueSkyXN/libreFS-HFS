@@ -8,8 +8,8 @@ FROM ubuntu:${UBUNTU_VERSION} AS builder
 
 ARG TARGETARCH=amd64
 ARG GO_VERSION=1.26.3
-ARG LIBREFS_REF=master
-ARG LIBREFS_COMMIT=HEAD
+ARG LIBREFS_COMMIT
+ARG HFS_RELEASE_BUILD=true
 
 ENV GOROOT=/usr/local/go
 ENV GOPATH=/root/go
@@ -37,18 +37,20 @@ RUN set -eux; \
 
 WORKDIR /src
 
+COPY BUILD_SOURCE.json /tmp/BUILD_SOURCE.json
+
 RUN git init . \
     && git remote add origin https://github.com/libreFS/libreFS.git \
-    && if [ "${LIBREFS_COMMIT}" = "HEAD" ]; then \
-        git fetch --depth 1 origin "${LIBREFS_REF}" \
-        && git checkout --detach FETCH_HEAD; \
-      else \
-        printf '%s' "${LIBREFS_COMMIT}" | grep -Eq '^[0-9a-f]{40}$' \
-        || { echo "LIBREFS_COMMIT must be a 40-character lowercase commit SHA or HEAD" >&2; exit 1; }; \
-        git fetch --depth 1 origin "${LIBREFS_COMMIT}" \
-        && git checkout --detach "${LIBREFS_COMMIT}" \
-        && test "$(git rev-parse HEAD)" = "${LIBREFS_COMMIT}"; \
-      fi
+    && test "${HFS_RELEASE_BUILD}" = "true" \
+    || { echo "Bundle-only builds require HFS_RELEASE_BUILD=true" >&2; exit 1; }; \
+    printf '%s' "${LIBREFS_COMMIT}" | grep -Eq '^[0-9a-f]{40}$' \
+    || { echo "Bundle-only builds require LIBREFS_COMMIT to be a 40-character lowercase commit SHA" >&2; exit 1; }; \
+    bundle_source_commit="$(sed -nE 's/^[[:space:]]*"librefs_source_commit":[[:space:]]*"([0-9a-f]{40})",?[[:space:]]*$/\1/p' /tmp/BUILD_SOURCE.json)"; \
+    test "${bundle_source_commit}" = "${LIBREFS_COMMIT}" \
+    || { echo "Bundle provenance LIBREFS commit does not match the Docker build input" >&2; exit 1; }; \
+    git fetch --depth 1 origin "${LIBREFS_COMMIT}" \
+    && git checkout --detach "${LIBREFS_COMMIT}" \
+    && test "$(git rev-parse HEAD)" = "${LIBREFS_COMMIT}"
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/root/go/pkg/mod \
@@ -69,12 +71,13 @@ RUN apt-get update \
 ARG APP_UID=1000
 ARG APP_GID=1000
 ARG GO_VERSION=1.26.3
-ARG LIBREFS_REF=master
-ARG LIBREFS_COMMIT=HEAD
+ARG LIBREFS_COMMIT
+ARG HFS_RELEASE_BUILD=true
 
 ENV GO_VERSION=${GO_VERSION}
-ENV LIBREFS_REF=${LIBREFS_REF}
 ENV LIBREFS_COMMIT=${LIBREFS_COMMIT}
+ENV HFS_RELEASE_BUILD=${HFS_RELEASE_BUILD}
+ENV HFS_BUILD_SOURCE_PATH=/usr/share/librefs-hfs/BUILD_SOURCE.json
 
 RUN set -eux; \
     if ! getent group "${APP_GID}" >/dev/null; then \
@@ -93,6 +96,15 @@ RUN set -eux; \
     chown -R "${APP_UID}:${APP_GID}" /data /tmp/nginx
 
 COPY --from=builder --chmod=0755 /out/librefs /usr/local/bin/librefs
+COPY --chmod=0444 BUILD_SOURCE.json /usr/share/librefs-hfs/BUILD_SOURCE.json
+COPY --chmod=0444 SHA256SUMS /usr/share/librefs-hfs/SHA256SUMS
+RUN set -eux; \
+    chown -R "${APP_UID}:${APP_GID}" /usr/share/librefs-hfs; \
+    chmod 0555 /usr/share/librefs-hfs; \
+    chmod 0444 /usr/share/librefs-hfs/BUILD_SOURCE.json /usr/share/librefs-hfs/SHA256SUMS; \
+    test "$(stat -c %a /usr/share/librefs-hfs)" = 555; \
+    test "$(stat -c %a /usr/share/librefs-hfs/BUILD_SOURCE.json)" = 444; \
+    test "$(stat -c %a /usr/share/librefs-hfs/SHA256SUMS)" = 444
 COPY --chmod=0644 hfs/ops_service.py /usr/local/bin/librefs-ops-service.py
 COPY --chmod=0644 hfs/admin_service.py /usr/local/bin/librefs-admin-service.py
 COPY --chmod=0644 hfs/nginx.conf /etc/nginx/nginx.conf

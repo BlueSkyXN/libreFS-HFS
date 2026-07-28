@@ -29,8 +29,7 @@ license: agpl-3.0
 | `APP_GID` | `1000` | runtime group id。 |
 | `TARGETARCH` | `amd64` | 构建架构，通常由 Docker BuildKit 注入。 |
 | `GO_VERSION` | `1.26.3` | 从 `go.dev` 下载的 Go 版本。 |
-| `LIBREFS_REF` | `master` | 从 libreFS 上游拉取的 branch 或 tag；开发默认会跟随 upstream 移动。 |
-| `LIBREFS_COMMIT` | `HEAD` | 精确 commit checkout；发布态必须设置为具体 upstream commit SHA。 |
+| `LIBREFS_COMMIT` | 无 | bundle-only build 的精确 upstream commit；必须同时写入 bundle provenance。 |
 
 当前 libreFS 上游默认分支是 `master`，不是 `main`。如果设置成 `main`，build 会报：
 
@@ -56,19 +55,19 @@ fatal: couldn't find remote ref main
 | Variable | 必需 | 默认值 | 什么时候设置 |
 | --- | --- | --- | --- |
 | `PUBLIC_BASE_URL` | 否 | `https://${SPACE_HOST}` | 只有使用自定义域名或需要临时覆盖公开根 URL 时设置。 |
-| `LIBREFS_REF` | 否 | `master` | 只有要临时切 upstream branch/tag 时设置。 |
-| `LIBREFS_COMMIT` | 否 | `HEAD` | 发布态必须设置为具体 upstream commit SHA；长期 pin 更适合写进 `Dockerfile` 默认值。 |
+| `LIBREFS_COMMIT` | bundle-only build 必须 | 无 | 必须是 40 位小写 SHA，且与 `BUILD_SOURCE.json` 的 `librefs_source_commit` 相同。 |
 | `GO_VERSION` | 否 | `1.26.3` | 只有 upstream 明确要求更换 Go 版本时设置。 |
 | `ADMIN_ENABLED` | 否 | `false` | 只有明确需要打开 `/_admin/` 时设置为 `true`。 |
+| `HFS_RELEASE_BUILD` | bundle-only build 必须 | `true` | 必须为 `true`；Docker build 会拒绝 `HEAD`、可变来源或与 bundle provenance 不同的 SHA。 |
 | `CONTROL_PLANE_DEFAULT_LANG` | 否 | `en` | 只有需要改变 `/_ops/` 和 `/_admin/` JSON 文案默认语言时设置；支持 `en`、`zh-CN`。 |
 
-Docker Space 会把 Space Variables 作为 build-time `ARG` 传给 Docker build，也会在 runtime 注入为环境变量。因此 `GO_VERSION`、`LIBREFS_REF` 和 `LIBREFS_COMMIT` 可以通过 Space Variables 覆盖 Dockerfile 默认值。
+Docker Space 会把 Space Variables 作为 build-time `ARG` 传给 Docker build，也会在 runtime 注入为环境变量。因此 `GO_VERSION` 和 `LIBREFS_COMMIT` 可以通过 Space Variables 覆盖 Dockerfile 默认值。
 
 Release reproducibility 口径：
 
-- `LIBREFS_REF=master` + `LIBREFS_COMMIT=HEAD` 是开发默认值，不是 release pin。
-- 发布态必须提供具体 `LIBREFS_COMMIT=<upstream commit sha>`；Docker build 会直接 fetch/checkout 该 commit，并校验实际 checkout 的 `git rev-parse HEAD` 是否一致。
-- 当前不改 runtime；Go tarball checksum 校验和 Ubuntu base image digest pin 属于后续 release hardening，不在本轮轻量对齐中引入。
+- 标准发布必须同时提供 `HFS_RELEASE_BUILD=true`、具体 `LIBREFS_COMMIT=<upstream commit sha>`，并由 exporter 将同一 SHA 写入 `BUILD_SOURCE.json`。
+- Docker build 会直接 fetch/checkout 该 commit，校验实际 checkout 的 `git rev-parse HEAD`，并拒绝与 bundle provenance 不一致的输入。
+- `hfs-dev.toml` 只登记 HFS v2 的 Settings 名称和 source-lane 关系；Go tarball checksum、Ubuntu base image 与源码 checkout 规则仍由 Dockerfile 直接定义和验证，不另设第二份 pin 台账。
 
 Hugging Face runtime 会提供 `SPACE_HOST`。当前 Space 的公开 host 是：
 
@@ -128,23 +127,21 @@ HF Volume:
 
 - 代码已有默认值的配置留在 `Dockerfile` / `hfs/start.sh`，不要同步到 HF Variables。
 - upstream libreFS 默认值保持 upstream 行为，不在 HF Variables 里重复声明。
-- 需要记录“当前理解”和真实 Secret 值时，写到本地 `.env.local`，不要提交。
+- 需要记录“当前理解”和真实 Secret 值时，写到受保护本机的 `.env`，不要提交。
 - 只有自定义域名、临时排障、临时切 branch/tag、或明确需要 commit pin 时，才新增 HF Variables。
 
-## 本地 `.env.local`
+## 本地 `.env` 配置台账
 
-可以在仓库根目录维护 `.env.local` 作为本地配置台账。它用于记录：
+HFS v2 以根目录 `.env` 作为本地值台账，提交的 [.env.example](../.env.example) 只提供空值和安全说明。它用于记录：
 
 - HF Space id、公开 host、Storage Bucket 和挂载点。
-- `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` 的真实值。
+- `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` 等真实值。
 - 关键配置项的默认来源、默认值和是否建议同步到 HF。
 - 临时覆盖值的候选项。
 
-`.env.local` 不是 runtime 自动加载文件，也不是部署契约；它只是本地审计和操作前核对用的台账。仓库 `.gitignore` 应显式忽略 `.env.local`，并忽略 `.env` 和 `.env.*`，只允许提交 `.env.example` 这类不含真实 secret 的占位模板。
+`.env` 不是 runtime 自动加载文件，也不是部署契约；它只是本地审计和操作前核对用的台账。`HF_TOKEN`、`GH_TOKEN` 等控制面凭据只用于本地或受保护的 GitHub Action Secret，绝不作为 Space Settings 上传。仓库 `.gitignore` 会忽略 `.env`、`.env.*`、`BUILD_SOURCE.json`、`SHA256SUMS` 和 `local/`；`.dockerignore` 同样排除私有台账和本地材料。
 
-`.dockerignore` 也应忽略 `.env`、`.env.*` 和 `local/`，避免本地 Docker build context 把私有台账或本地材料带进镜像构建。
-
-可提交的 ENV 字段说明见 [环境变量参考](env-reference.md)。该文档只写 key、平台、分类、默认值和建议值，不写真实地址、账号、密码、token 或其他 Secret value。
+现有 `.env.local` 继续被忽略，迁移其内容到 `.env` 必须由 owner 在受保护本机完成；本轮不读取、复制或改写该文件。可提交的 ENV 字段说明见 [环境变量参考](env-reference.md)，该文档只写 key、平台、分类、默认值和建议值，不写真实地址、账号、密码、token 或其他 Secret value。
 
 ## Runtime Environment Variables
 

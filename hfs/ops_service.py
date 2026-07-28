@@ -88,6 +88,7 @@ SAFE_CONFIG_KEYS = [
     "LIBREFS_REF",
     "LIBREFS_COMMIT",
     "GO_VERSION",
+    "HFS_RELEASE_BUILD",
     "ADMIN_ENABLED",
     "ADMIN_FILES_ENABLED",
     "ADMIN_FILES_WRITE_ENABLED",
@@ -581,13 +582,39 @@ def config_payload(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
     }
 
 
+def wrapper_source_payload() -> dict[str, Any]:
+    path = Path(env("HFS_BUILD_SOURCE_PATH", "/usr/share/librefs-hfs/BUILD_SOURCE.json"))
+    try:
+        evidence = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"available": False}
+
+    source_commit = evidence.get("source_commit")
+    if (
+        evidence.get("schema_version") != 1
+        or evidence.get("source_kind") != "commit"
+        or not isinstance(source_commit, str)
+        or not re.fullmatch(r"[0-9a-f]{40}", source_commit)
+        or evidence.get("source_repository") != "https://github.com/BlueSkyXN/libreFS-HFS.git"
+    ):
+        return {"available": False}
+
+    return {
+        "available": True,
+        "source_commit": source_commit,
+        "source_repository": evidence["source_repository"],
+        "generated_at": evidence.get("generated_at"),
+    }
+
+
 def version_payload() -> dict[str, Any]:
     return {
         "ok": True,
-        "librefs_ref": env("LIBREFS_REF", "master"),
+        "librefs_ref": "pinned-bundle",
         "librefs_commit": env("LIBREFS_COMMIT", "HEAD"),
         "go_version": env("GO_VERSION"),
         "ubuntu_version": env("UBUNTU_VERSION"),
+        "wrapper_source": wrapper_source_payload(),
         "space_id": env("SPACE_ID"),
         "space_host": env("SPACE_HOST"),
         "container": {

@@ -215,7 +215,7 @@ curl -fsS -H "X-Admin-Token: $ADMIN_TOKEN" \
   https://blueskyxn-librefs-hfs.hf.space/_admin/api/status
 ```
 
-HF CLI 只能列出 Secret key，不能回显 Secret value；要确认 value 是否同步，需要用本地 `.env.local` 里的 token 调线上接口验证。
+HF CLI 只能列出 Secret key，不能回显 Secret value；要确认 value 是否同步，需要用受保护本机 `.env` 里的 token 调线上接口验证。
 
 ## 根路径 `/` 返回 `400 application/xml`
 

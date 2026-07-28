@@ -19,8 +19,12 @@
 | --- | --- | --- |
 | `README.md` | 是 | Hugging Face Space card metadata 和项目入口说明。 |
 | `Dockerfile` | 是 | 定义远端 build 和 runtime 镜像。 |
-| `hfs-dev.toml` | 否 | HFS 开发范式 alignment manifest，声明 Pattern A、`source-fetch`、repo-root Space root 和 release pin surface。 |
-| `hfs/start.sh` | 是 | 容器启动入口，负责设置 URL 环境变量、启动 libreFS、ops-service、admin-service 和 Nginx。 |
+| `hfs-dev.toml` | 否 | HFS v2 最小语义登记：Pattern A、`port` / `source`、bundle-only build 与 commit provenance、Settings 名称和 `/data` 关系；不重复保存 pin 值。 |
+| `.env.example` | 否 | 根 `.env` 本地配置台账的无密模板；只含 key 名称和空值。 |
+| `scripts/export-space-bundle.sh` | 否 | 从 clean immutable Git commit 导出 allowlisted source wrapper，并生成 `BUILD_SOURCE.json` 与 `SHA256SUMS`。 |
+| `scripts/verify-space-bundle.sh` | 否 | 拒绝 bundle 中的产品源码、`.env*`、`local/`、缓存、生成数据、凭证、symlink 或未登记文件。 |
+| `.github/workflows/deploy-hf-space.yml` | 否 | 仅能手动确认触发的 HF CLI 部署；写入前后强制完整 Space tree/readback 与 provenance 核对，发现 legacy 或其他未登记文件即拒绝；不 force-push、delete、restart 或操作数据。 |
+| `hfs/start.sh` | 是 | 容器启动入口，校验 immutable wrapper source evidence、设置 URL 环境变量、启动 libreFS、ops-service、admin-service 和 Nginx。 |
 | `hfs/nginx.conf` | 是 | 单端口反向代理配置，把 `/_ops/`、`/_admin/`、`/console/` 和 `/` 分发到不同内部端口。 |
 | `hfs/ops_service.py` | 是 | 只读诊断服务，提供浏览器 dashboard、token/cookie 登录态和 JSON/metrics API。 |
 | `hfs/admin_service.py` | 是 | 默认关闭的管理服务。 |
@@ -73,8 +77,8 @@ license: agpl-3.0
 | `APP_GID` | `1000` | runtime 用户 GID。 |
 | `TARGETARCH` | `amd64` | Docker buildx 注入的目标架构。 |
 | `GO_VERSION` | `1.26.3` | builder 阶段下载的 Go 版本。 |
-| `LIBREFS_REF` | `master` | libreFS upstream branch/tag。 |
-| `LIBREFS_COMMIT` | `HEAD` | 开发默认不 pin；发布态必须设置具体 upstream commit SHA，用于确保源码版本完全固定。 |
+| `LIBREFS_COMMIT` | 无 | bundle-only build 必须设置具体 upstream commit SHA，且必须与 `BUILD_SOURCE.json` 记录的 libreFS source SHA 一致。 |
+| `HFS_RELEASE_BUILD` | `true` | bundle-only build 必须为 `true`；Dockerfile 会拒绝 `HEAD`、短 SHA、可变 ref 或与 bundle provenance 不同的 `LIBREFS_COMMIT`。 |
 
 ### Builder Stage
 
@@ -144,6 +148,8 @@ runtime 只复制五个运行文件：
 | 来源 | 目标 | 权限 |
 | --- | --- | --- |
 | `/out/librefs` | `/usr/local/bin/librefs` | `0755` |
+| `BUILD_SOURCE.json` | `/usr/share/librefs-hfs/BUILD_SOURCE.json` | `0444` |
+| `SHA256SUMS` | `/usr/share/librefs-hfs/SHA256SUMS` | `0444` |
 | `hfs/ops_service.py` | `/usr/local/bin/librefs-ops-service.py` | `0644` |
 | `hfs/admin_service.py` | `/usr/local/bin/librefs-admin-service.py` | `0644` |
 | `hfs/nginx.conf` | `/etc/nginx/nginx.conf` | `0644` |
@@ -179,6 +185,8 @@ https://blueskyxn-librefs-hfs.hf.space/minio/health/ready
 ```
 
 缺少任意一个都会直接退出。这比让 libreFS 以不明确状态启动更容易排障。
+
+在处理 URL 和启动进程前，脚本还会解析 image 内的 `/usr/share/librefs-hfs/BUILD_SOURCE.json`，并用相邻 `SHA256SUMS` 校验其 digest。该文件必须声明本 wrapper 的 40 位 Git commit、固定 source repository 和 `LIBREFS_COMMIT` 上游 pin 字段；缺失、损坏、checksum 不一致或不符合 schema 时直接退出。它由 source bundle exporter 生成，不能手写、上传 `.env` 或以 product source 替代。
 
 ### 默认路径和端口
 

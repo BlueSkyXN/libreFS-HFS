@@ -1,8 +1,8 @@
 # 环境变量台账参考
 
-本文档是可提交的公开版 ENV 台账。它说明每个变量属于哪个平台、应该放在 `V` 还是 `S`、是否推荐配置、默认值和建议值。真实地址、账号、密码、token、access key、secret key 只允许写在本地 `.env.local`、Hugging Face Secrets、GitHub Secrets 或临时 shell 环境中，不能写进本文档。
+本文档是可提交的公开版 ENV 台账。它说明每个变量属于哪个平台、应该放在 `V` 还是 `S`、是否推荐配置、默认值和建议值。真实地址、账号、密码、token、access key、secret key 只允许写在本地 `.env`、Hugging Face Secrets、受保护的 GitHub Secrets 或临时 shell 环境中，不能写进本文档。
 
-`.env.local` 的定位是本机笔记本：它可以记录已知真实值，帮助后续覆盖云端配置；本文档只记录公开说明和占位符。
+`.env` 的定位是受保护本机的值台账：它可以记录已知真实值，帮助后续与云端配置对账；提交的 `.env.example` 只保留空值和说明。旧 `.env.local` 仍被忽略，但不再是 HFS v2 的配置事实源。
 
 ## 标记说明
 
@@ -13,14 +13,14 @@
 | `V` | Variables，适合非敏感开关、版本号、URL 覆盖、构建参数或运行参数。 |
 | `S` | Secrets，适合密码、token、access key、secret key、KMS key。 |
 | `Volume` | Hugging Face Storage Volume，不属于 `V` 或 `S`。 |
-| `本地` | 只留在 `.env.local` 或本机 shell，不同步到云端平台。 |
+| `本地` | 只留在 `.env` 或本机 shell，不同步到云端平台。 |
 | `平台注入` | 由平台运行时自动注入，不手动配置。 |
 | `不配置` | 不建议写入任何平台，除非以后明确改变部署契约。 |
 
 原则：
 
 - Secret 只能写 key 名称、用途和占位符，不能写真实 value。
-- API 根地址、root 账号、root 密码、ops token、admin token 这类本地已知值只写入 `.env.local`，不要写入 docs。
+- API 根地址、root 账号、root 密码、ops token、admin token 这类本地已知值只写入 `.env`，不要写入 docs。
 - Hugging Face Secrets 和 GitHub Secrets 只能确认 key 是否存在，不能回读明文 value。
 - 不要把和代码默认值相同的内容同步成云端 Variables；Variables 应只表达“明确覆盖默认行为”。
 - GitHub repo 未发现必须配置的 Variables 或 Secrets；如果以后增加 GitHub Actions，再按 `GH + V/S` 记录。
@@ -39,6 +39,7 @@
 | `OPS_TOKEN` | `HF` | `S` | 推荐 | `librefs_ops_demo_token`。 | 强随机 token。 | 保护 `/_ops/` 只读诊断面，支持网页登录、`X-Ops-Token` 和 bearer token。 | 默认值只适合 demo；公开或长期运行应覆盖。 |
 | `ADMIN_TOKEN` | `HF` | `S` | 仅开启 admin 时必须 | 无默认。 | 强随机 token。 | 保护 `/_admin/` 管理面，支持 `X-Admin-Token` 和 bearer token。 | 只有 `ADMIN_ENABLED=true` 时需要；不要放到 `V`。 |
 | `ADMIN_ENABLED` | `HF` | `V` | 按需推荐 | `false`。 | `true` 或 `false`。 | 控制 `/_admin/` 是否开启。 | 开启前必须同时配置 `ADMIN_TOKEN`。 |
+| `HFS_RELEASE_BUILD` | `HF` | `V` | 发布态必须 | `false`。 | `true`。 | 标识 Docker build 为受控 release。 | 设为 `true` 时必须同时将 `LIBREFS_COMMIT` 设为具体 40 位小写 SHA；缺失、`HEAD` 或非法值会 fail-closed。 |
 | `CONTROL_PLANE_DEFAULT_LANG` | `HF` | `V` | 按需 | `en`。 | `en` 或 `zh-CN`。 | 控制 `/_ops/` 和 `/_admin/` JSON 文案默认语言。 | 请求参数和请求头仍可临时覆盖语言。 |
 
 ## 第 3 层：可选 HF Variables
@@ -81,7 +82,9 @@
 
 | 变量 | 平台 | 位置 | 推荐 | 默认值 | 建议值 / 可能值 | 用途 | 注意 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `HF_STORAGE_BUCKET` | `HF` | `Volume` | 推荐只在 `.env.local` 记录 | 无 env 默认。 | `<hf-volume-source>`。 | 本地记录 Hugging Face Storage Bucket 来源。 | Volume 由 Space volume 配置管理，不是 `V` 或 `S`。 |
+| `HF_TOKEN` | `本地` / `GH` | `本地` / `S` | 仅受控发布时需要 | 空。 | `<local-or-github-action-token>`。 | 仅供本地 HF CLI 或手动确认的 GitHub Action 上传最小 wrapper。 | 不推入 Space、不写入 `.env.example` 以外的 Git 文件，也不出现在日志。 |
+| `GH_TOKEN` | `本地` | `本地` | 按需 | 空。 | `<local-github-token>`。 | 本地 GitHub 控制面凭据。 | 不推入 Space，也不应作为 libreFS runtime 配置。 |
+| `HF_STORAGE_BUCKET` | `HF` | `Volume` | 推荐只在 `.env` 记录 | 无 env 默认。 | `<hf-volume-source>`。 | 本地记录 Hugging Face Storage Bucket 来源。 | Volume 由 Space volume 配置管理，不是 `V` 或 `S`。 |
 | `HF_STORAGE_MOUNT` | `HF` | `Volume` | 推荐只在 `.env.local` 记录 | `/data`。 | `/data`。 | 本地记录 Hugging Face Volume 挂载路径。 | 应和 `DATA_DIR` 的有效值保持一致。 |
 | `HF_SPACE_ID` | `本地` | `本地` | 推荐只在 `.env.local` 记录 | 无。 | `<owner>/<space-name>`。 | 本机执行 `hf` CLI 命令时复用的 Space repo id。 | 不是容器环境变量，不同步到 `V` 或 `S`。 |
 | `HF_SPACE_HOST` | `本地` | `本地` | 推荐只在 `.env.local` 记录 | 无。 | `<space-host>`。 | 本机记录公开 host，方便人工核对和脚本拼接。 | 容器实际使用 Hugging Face 注入的 `SPACE_HOST`。 |
@@ -143,7 +146,7 @@ gh variable list --repo <owner>/<repo>
 gh secret list --repo <owner>/<repo>
 ```
 
-Secrets 只能回读 key，不能回读 value。需要维护真实值时，把它们写入本地 `.env.local`，并确认 `.env.local` 被 `.gitignore` 和 `.dockerignore` 忽略。
+Secrets 只能回读 key，不能回读 value。需要维护真实值时，把它们写入受保护本机 `.env`，并确认 `.env` 被 `.gitignore` 和 `.dockerignore` 忽略；旧 `.env.local` 仅保留 ignore 兼容。
 
 同步示例只使用占位符：
 

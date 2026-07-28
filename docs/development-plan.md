@@ -6,7 +6,7 @@
 
 LibreFS HFS 是 libreFS 的 Hugging Face Docker Space 部署包装层。仓库自身不包含 libreFS 源码，而是在远端 Docker build 阶段从 `https://github.com/libreFS/libreFS.git` 拉取源码并编译 `librefs`。
 
-按 HFS 开发范式，本仓库属于 Pattern A（HFS Port Repository），repo root 同时是 Space root 和 GitHub 维护 root；runtime 获取模式是 `source-fetch`，多服务 runtime glue 集中在 `hfs/`。
+按 HFS 开发范式，本仓库属于 Pattern A（HFS Port Repository），repo root 同时是 Space root 和 GitHub 维护 root；runtime 获取模式是 `bundle-only-build`，多服务 runtime glue 集中在 `hfs/`。
 
 必须保持的核心契约：
 
@@ -21,7 +21,7 @@ LibreFS HFS 是 libreFS 的 Hugging Face Docker Space 部署包装层。仓库�
 | 领域 | 当前实现 | 证据文件 |
 | --- | --- | --- |
 | HFS 范式 | Pattern A；repo root 是 Space root，runtime glue 收在 `hfs/`。 | `hfs-dev.toml`, `README.md`, `Dockerfile`, `hfs/` |
-| Runtime 获取模式 | `source-fetch`；Docker build 阶段从 libreFS upstream 拉源码并编译。 | `hfs-dev.toml`, `Dockerfile` |
+| Runtime 获取模式 | `bundle-only-build`；Docker build 阶段只接受 clean wrapper bundle 记录的 libreFS commit，并从 upstream 拉源码编译。 | `hfs-dev.toml`, `Dockerfile` |
 | Docker build | 多阶段 Ubuntu build/runtime；builder 下载 Go tarball、拉取 libreFS upstream 并编译 `/out/librefs`。 | `Dockerfile` |
 | Runtime 入口 | `hfs/start.sh` 校验 root Secrets，推导公开 URL，设置 MinIO-compatible URL 环境变量，启动并监控 libreFS、ops-service、admin-service、Nginx。 | `hfs/start.sh` |
 | 单端口路由 | `hfs/nginx.conf` 监听 `7860`；`/_ops/` 转发到 `127.0.0.1:8081/`，`/_admin/` 转发到 `127.0.0.1:8082/`，`/console/` 转发到 `127.0.0.1:9001/`，其余路径转发到 `127.0.0.1:9000`。 | `hfs/nginx.conf` |
@@ -39,8 +39,8 @@ LibreFS HFS 是 libreFS 的 Hugging Face Docker Space 部署包装层。仓库�
 | --- | --- | --- | --- |
 | P0 | 签名 S3 smoke test | 已有 `scripts/smoke-s3-curl.sh` 可避免安装 `aws` 或 `mc`；但公开 health、Console HTML 和静态资源仍不能证明 `ListBuckets`、上传、下载、policy 和匿名直链完整可用。 | 在可使用 root 凭证时执行该脚本，并记录命令和结果。 |
 | P0 | `/data` 持久化读回 | Volume 挂载只说明路径具备持久化条件，不等于已通过重启和 rebuild 后读回。 | 做“上传对象 -> restart -> 读取 -> rebuild -> 再读取”的闭环。 |
-| P1 | 上游源码可重复性 | `LIBREFS_REF=master` + `LIBREFS_COMMIT=HEAD` 是开发默认值，会跟随 upstream 移动，适合快速测试，但不是 release pin。 | 发布态必须设置并记录 `LIBREFS_COMMIT=<upstream commit sha>`；Docker build 会直接 fetch/checkout 该 commit，`hfs-dev.toml` 的 release pin surface 只把具体 commit SHA 计入可复现输入。 |
-| P1 | 远端发布同步 | GitHub `origin/main` 和 Hugging Face `hf/main` 是两个不同远端；GitHub PR 合并不会自动触发 Space rebuild。 | 发布到 HF 前单独确认是否需要 `git push hf main`，并按运维检查清单回读。 |
+| P1 | 上游源码可重复性 | bundle-only build 只接受 bundle provenance 和 `LIBREFS_COMMIT` 相同的不可变 upstream SHA。 | 受控发布必须设 `HFS_RELEASE_BUILD=true` 并提供 `LIBREFS_COMMIT=<upstream commit sha>`；Docker build 会直接 fetch/checkout 并校验该 commit。 |
+| P1 | 远端发布同步 | GitHub `origin/main` 和 Hugging Face Space 是两个不同的事实面；GitHub PR 合并不会自动触发 Space rebuild。 | release owner 在 GitHub Actions 手动确认 workflow；它只上传 allowlisted wrapper、readback `BUILD_SOURCE.json`，不 force-push、delete、重启、改 Settings 或操作数据。 |
 | P1 | Ops/Admin live 验收 | 本地静态检查能验证路由和服务语法，但不能证明 HF runtime 已接管新镜像。当前生产环境已开启 admin，不能再把 `/_admin/` 默认 404 当作线上预期。 | 发布到 HF 后检查 `/_ops/health`、`/_admin/api/status`、无 token `401`、runtime logs 和 Space `runtime.raw.sha`；只有关闭 `ADMIN_ENABLED` 时才验证 `404 admin_disabled`。 |
 | P2 | Release hardening | 当前不改 runtime。Go tarball 下载仍未做 checksum 校验，Ubuntu base image 仍使用 tag 而非 digest；这不影响当前 checker，但还不是完整 supply-chain pin。 | 真正做 release hardening 时，再引入 `GO_TARBALL_SHA256` 校验和 `ubuntu:24.04@sha256:<digest>` 或等价 base image digest surface。 |
 | P2 | 私有对象长期直链 | 当前只有 S3 签名请求、presigned URL、public bucket policy 三种模式，没有私有稳定下载网关。 | 如果确实需要，另行设计小型鉴权下载服务，不塞进当前 Nginx-only 包装层。 |

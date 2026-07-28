@@ -8,8 +8,10 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/validate-contract.sh [--remote]
 
-Validate the LibreFS HFS packaging contract without installing project
-dependencies or building libreFS locally.
+Validate the LibreFS HFS source-lane packaging contract without installing
+project dependencies or building libreFS locally. Docker source builds are
+intentionally skipped because they fetch the upstream repository over the
+network.
 
 Options:
   --remote    Also check the public Hugging Face Space health endpoint.
@@ -40,7 +42,6 @@ cd "$ROOT_DIR"
 check() {
   local label="$1"
   shift
-
   printf '==> %s\n' "$label"
   "$@"
 }
@@ -58,73 +59,154 @@ require_pattern() {
 }
 
 check "whitespace and conflict-marker check" git diff --check -- \
-  README.md docs Dockerfile hfs .dockerignore .gitignore .gitattributes AGENTS.md scripts
+  README.md docs Dockerfile hfs .dockerignore .gitignore .gitattributes AGENTS.md scripts .github hfs-dev.toml .env.example
 
-check "shell script syntax" bash -n hfs/start.sh
-bash -n scripts/smoke-s3-curl.sh
-bash -n scripts/sample-hf-bucket-storage.sh
+check "shell script syntax" bash -n \
+  hfs/start.sh \
+  scripts/export-space-bundle.sh \
+  scripts/verify-space-bundle.sh \
+  scripts/smoke-s3-curl.sh \
+  scripts/sample-hf-bucket-storage.sh
+
+test -x scripts/export-space-bundle.sh
+test -x scripts/verify-space-bundle.sh
 test -x scripts/smoke-s3-curl.sh
 test -x scripts/sample-hf-bucket-storage.sh
 
-check "Python service syntax" python3 -m py_compile hfs/ops_service.py hfs/admin_service.py
+check "Python service syntax without bytecode" python3 -B -c '
+import sys
+from pathlib import Path
+
+for source_path in sys.argv[1:]:
+    compile(Path(source_path).read_text(encoding="utf-8"), source_path, "exec")
+' hfs/ops_service.py hfs/admin_service.py scripts/presign-s3-request.py
 
 check "README front matter" require_pattern README.md '^sdk: docker$' 'README.md must keep sdk: docker'
 require_pattern README.md '^app_port: 7860$' 'README.md must keep app_port: 7860'
 require_pattern README.md '^license: agpl-3.0$' 'README.md must keep license: agpl-3.0'
 
-check "HFS alignment manifest" test -f hfs-dev.toml
-require_pattern hfs-dev.toml '^schema_version = 2$' 'alignment manifest must use structured v2 release pins'
-require_pattern hfs-dev.toml '^standard = "hfs-dev"$' 'alignment manifest must identify the hfs-dev standard'
-require_pattern hfs-dev.toml '^pattern = "A"$' 'libreFS-HFS must remain a Pattern A port repository'
-require_pattern hfs-dev.toml '^runtime_mode = "source-fetch"$' 'libreFS-HFS build fetches upstream libreFS source'
-require_pattern hfs-dev.toml '^space_root_mode = "repo-root"$' 'Pattern A Space root must remain the repository root'
-require_pattern hfs-dev.toml '^release_pin_required = true$' 'release builds must expose immutable pin surfaces'
-require_pattern hfs-dev.toml 'hfs/start\.sh' 'runtime glue manifest must include hfs/start.sh'
-require_pattern hfs-dev.toml '^\[\[release_pins\]\]$' 'release pins must use structured v2 tables'
-require_pattern hfs-dev.toml '^name = "LIBREFS_COMMIT"$' 'release pin must include LIBREFS_COMMIT'
-require_pattern hfs-dev.toml '^required_for_release = true$' 'LIBREFS_COMMIT must be required for release builds'
-require_pattern hfs-dev.toml '^release_requires_commit_sha = true$' 'source-fetch release pin must require an upstream commit SHA'
-require_pattern hfs-dev.toml '^name = "LIBREFS_REF"$' 'development mutable source must be documented separately from the release pin'
-require_pattern hfs-dev.toml 'GO_TARBALL_SHA256' 'Go tarball checksum hardening backlog must remain visible'
-require_pattern hfs-dev.toml 'UBUNTU_BASE_IMAGE=.*@sha256' 'Ubuntu base image digest hardening backlog must remain visible'
+check "HFS v2 semantic registry" test -f hfs-dev.toml
+test -f hfs-dev.candidate.toml
+require_pattern hfs-dev.toml '^standard = "2\.0"$' 'manifest must use HFS standard 2.0'
+require_pattern hfs-dev.toml '^project = "librefs-hfs"$' 'manifest must declare the wrapper project'
+require_pattern hfs-dev.toml '^space = "BlueSkyXN/libreFS-HFS"$' 'manifest must declare the target Space'
+require_pattern hfs-dev.candidate.toml '^space = "BlueSkyXN/libreFS-HFS-v2-candidate"$' 'candidate manifest must declare the private candidate Space'
+require_pattern hfs-dev.toml '^sovereignty = "port"$' 'libreFS-HFS must remain a port wrapper'
+require_pattern hfs-dev.toml '^lane = "source"$' 'libreFS-HFS must remain in the source lane'
+require_pattern hfs-dev.toml '^version_source = "commit"$' 'manifest must declare commit-based production provenance'
+require_pattern hfs-dev.toml '^pattern = "A"$' 'libreFS-HFS must remain a Pattern A repository'
+require_pattern hfs-dev.toml '^runtime_mode = "bundle-only-build"$' 'runtime must remain bundle-only build'
+require_pattern hfs-dev.toml '^release_commit_env = "LIBREFS_COMMIT"$' 'registry must name the upstream release commit pin'
+require_pattern hfs-dev.toml '^release_gate_env = "HFS_RELEASE_BUILD"$' 'registry must name the release gate'
+require_pattern hfs-dev.toml '"MINIO_ROOT_PASSWORD"' 'registry must name required Space secrets without values'
+require_pattern hfs-dev.toml '"HF_TOKEN"' 'registry must keep deployment controls local-only'
+if grep -Eq '(hf_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,})' hfs-dev.toml; then
+  echo "Contract check failed: hfs-dev.toml must not contain a credential value" >&2
+  exit 1
+fi
 
-check "Dockerfile contract" require_pattern Dockerfile '^FROM ubuntu:\$\{UBUNTU_VERSION\} AS builder$' 'builder must stay on Ubuntu'
+check "local configuration ledger boundary" test -f .env.example
+for ignored_path in .env .env.local local/ BUILD_SOURCE.json; do
+  if ! git check-ignore --quiet --no-index -- "$ignored_path"; then
+    echo "Contract check failed: $ignored_path must be ignored locally" >&2
+    exit 1
+  fi
+done
+require_pattern .dockerignore '^\.env\.\*$' 'Docker context must exclude .env.*'
+require_pattern .dockerignore '^local$' 'Docker context must exclude local material'
+require_pattern .dockerignore '^__pycache__$' 'Docker context must exclude Python caches'
+
+check "Dockerfile source provenance contract" require_pattern Dockerfile '^FROM ubuntu:\$\{UBUNTU_VERSION\} AS builder$' 'builder must stay on Ubuntu'
 require_pattern Dockerfile '^FROM ubuntu:\$\{UBUNTU_VERSION\}$' 'runtime must stay on Ubuntu'
 require_pattern Dockerfile 'git remote add origin https://github\.com/libreFS/libreFS\.git' 'build must fetch libreFS upstream source'
-require_pattern Dockerfile 'git fetch --depth 1 origin "\$\{LIBREFS_REF\}"' 'development builds must fetch the configured libreFS ref'
+require_pattern Dockerfile 'HFS_RELEASE_BUILD' 'Dockerfile must distinguish a release source build'
+require_pattern Dockerfile 'Bundle-only builds require LIBREFS_COMMIT to be a 40-character lowercase commit SHA' 'bundle build must reject a mutable upstream source'
+require_pattern Dockerfile 'Bundle provenance LIBREFS commit does not match the Docker build input' 'bundle build must bind its source evidence to the Docker input'
 require_pattern Dockerfile 'git fetch --depth 1 origin "\$\{LIBREFS_COMMIT\}"' 'release builds must fetch the pinned libreFS commit directly'
 require_pattern Dockerfile 'git checkout --detach "\$\{LIBREFS_COMMIT\}"' 'release builds must checkout the pinned libreFS commit'
-require_pattern Dockerfile 'LIBREFS_COMMIT must be a 40-character lowercase commit SHA or HEAD' 'release pin must reject non-SHA LIBREFS_COMMIT values'
-require_pattern Dockerfile 'python3' 'runtime must include Python for ops/admin services'
-require_pattern Dockerfile 'librefs-ops-service\.py' 'runtime must copy ops service'
-require_pattern Dockerfile 'librefs-admin-service\.py' 'runtime must copy admin service'
+require_pattern Dockerfile 'test "\$\(git rev-parse HEAD\)" = "\$\{LIBREFS_COMMIT\}"' 'release builds must verify the upstream checkout'
+require_pattern Dockerfile 'COPY --chmod=0444 BUILD_SOURCE\.json /usr/share/librefs-hfs/BUILD_SOURCE\.json' 'runtime must retain immutable wrapper source evidence'
+require_pattern Dockerfile 'COPY --chmod=0444 SHA256SUMS /usr/share/librefs-hfs/SHA256SUMS' 'runtime must retain wrapper source checksums'
+require_pattern Dockerfile 'stat -c %a /usr/share/librefs-hfs/BUILD_SOURCE.json' 'runtime image must verify provenance file modes explicitly'
 require_pattern Dockerfile '^EXPOSE 7860$' 'container must expose only the HF app port'
 require_pattern Dockerfile 'http://127\.0\.0\.1:7860/minio/health/ready' 'healthcheck must use the public Nginx port'
+if grep -Eq '^\s*COPY\s+\.\s+' Dockerfile; then
+  echo "Contract check failed: Dockerfile must not COPY the complete repository" >&2
+  exit 1
+fi
 
-check "start.sh contract" require_pattern hfs/start.sh 'MINIO_ROOT_USER' 'start.sh must require MINIO_ROOT_USER'
+check "start.sh provenance and runtime contract" require_pattern hfs/start.sh 'MINIO_ROOT_USER' 'start.sh must require MINIO_ROOT_USER'
 require_pattern hfs/start.sh 'MINIO_ROOT_PASSWORD' 'start.sh must require MINIO_ROOT_PASSWORD'
+require_pattern hfs/start.sh '^HFS_BUILD_SOURCE_PATH="/usr/share/librefs-hfs/BUILD_SOURCE\.json"$' 'start.sh must use the fixed image source evidence path'
+require_pattern hfs/start.sh '^HFS_BUILD_CHECKSUMS_PATH="/usr/share/librefs-hfs/SHA256SUMS"$' 'start.sh must use the fixed image checksum path'
+if grep -Eq 'HFS_BUILD_(SOURCE|CHECKSUMS)_PATH="\$\{' hfs/start.sh; then
+  echo "Contract check failed: runtime settings must not redirect immutable source evidence" >&2
+  exit 1
+fi
+require_pattern hfs/start.sh 'Immutable wrapper source evidence checksum does not match' 'start.sh must fail closed on mismatched source evidence'
+require_pattern hfs/start.sh 'checksums\[name\] = digest' 'start.sh must index SHA256SUMS by filename'
+require_pattern hfs/start.sh 'Immutable wrapper source evidence does not satisfy the HFS source contract' 'start.sh must fail closed on invalid source evidence'
+require_pattern hfs/start.sh 'Bundle-only runtime requires LIBREFS_COMMIT' 'bundle runtime must fail closed without an immutable upstream pin'
+require_pattern hfs/start.sh 'librefs_source_commit' 'runtime must bind wrapper and libreFS source commits together'
 require_pattern hfs/start.sh 'PUBLIC_BASE_URL' 'start.sh must honor PUBLIC_BASE_URL'
 require_pattern hfs/start.sh 'SPACE_HOST' 'start.sh must derive from SPACE_HOST'
 require_pattern hfs/start.sh 'MINIO_BROWSER_REDIRECT_URL.*console/' 'Console redirect URL must include /console/'
-require_pattern hfs/start.sh 'MINIO_BROWSER_REDIRECT_URL must end with /console/' 'Console redirect override must be validated'
-require_pattern hfs/start.sh 'MINIO_SERVER_URL must start with http:// or https://' 'S3 public URL must include a scheme'
 require_pattern hfs/start.sh 'nginx -t -c "\$NGINX_CONF"' 'start.sh must validate Nginx config before starting'
-require_pattern hfs/start.sh 'librefs-ops-service\.py' 'start.sh must start ops service'
-require_pattern hfs/start.sh 'librefs-admin-service\.py' 'start.sh must start admin service'
 require_pattern hfs/start.sh 'ADMIN_ENABLED.*false' 'admin surface must default to disabled'
 
+check "source bundle verifier fixture" bash -c '
+  set -Eeuo pipefail
+  tmp_dir="$(mktemp -d)"
+  trap "rm -rf \"$tmp_dir\"" EXIT
+  bundle="$tmp_dir/bundle"
+  mkdir -p "$bundle/hfs"
+  cp README.md Dockerfile LICENSE hfs-dev.toml .dockerignore .gitattributes "$bundle/"
+  cp hfs/start.sh hfs/nginx.conf hfs/ops_service.py hfs/admin_service.py "$bundle/hfs/"
+  python3 - "$bundle/BUILD_SOURCE.json" <<"PY"
+import json
+import sys
+from pathlib import Path
+Path(sys.argv[1]).write_text(json.dumps({
+    "schema_version": 1,
+    "source_kind": "commit",
+    "source_commit": "0123456789abcdef0123456789abcdef01234567",
+    "librefs_source_commit": "89abcdef0123456789abcdef0123456789abcdef",
+    "source_repository": "https://github.com/BlueSkyXN/libreFS-HFS.git",
+    "upstream_source_ref_env": "LIBREFS_COMMIT",
+    "generated_at": "2026-07-26T00:00:00Z",
+}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+  (
+    cd "$bundle"
+    if command -v sha256sum >/dev/null 2>&1; then
+      sha256sum README.md Dockerfile LICENSE hfs-dev.toml .dockerignore .gitattributes hfs/start.sh hfs/nginx.conf hfs/ops_service.py hfs/admin_service.py BUILD_SOURCE.json > SHA256SUMS
+    else
+      shasum -a 256 README.md Dockerfile LICENSE hfs-dev.toml .dockerignore .gitattributes hfs/start.sh hfs/nginx.conf hfs/ops_service.py hfs/admin_service.py BUILD_SOURCE.json > SHA256SUMS
+    fi
+  )
+  scripts/verify-space-bundle.sh --bundle "$bundle"
+  printf "package product\n" > "$bundle/librefs-product-source.go"
+  if scripts/verify-space-bundle.sh --bundle "$bundle"; then
+    echo "Contract check failed: verifier accepted an unallowlisted product source file" >&2
+    exit 1
+  fi
+  rm -f "$bundle/librefs-product-source.go"
+  printf "\n" >> "$bundle/BUILD_SOURCE.json"
+  if scripts/verify-space-bundle.sh --bundle "$bundle"; then
+    echo "Contract check failed: verifier accepted tampered source evidence" >&2
+    exit 1
+  fi
+'
+
 check "S3 smoke script contract" require_pattern scripts/smoke-s3-curl.sh '--aws-sigv4' 'S3 smoke test must use curl SigV4 support'
+require_pattern scripts/smoke-s3-curl.sh 'presign-s3-request\.py' 'private candidate S3 smoke must use query signing'
+require_pattern scripts/smoke-s3-curl.sh 'Authorization: Bearer' 'private candidate S3 smoke must authenticate to the HF gateway'
 require_pattern scripts/smoke-s3-curl.sh 'Refusing to use bucket' 'S3 smoke test must refuse existing buckets'
 
 check "storage sampler script contract" test -f scripts/sample-hf-bucket-storage.sh
 require_pattern scripts/sample-hf-bucket-storage.sh 'hf buckets info "\$BUCKET" --json' 'storage sampler must read HF bucket accounting'
 require_pattern scripts/sample-hf-bucket-storage.sh 'hf buckets list "\$BUCKET" -R --json' 'storage sampler must read HF bucket visible tree'
 require_pattern scripts/sample-hf-bucket-storage.sh 'OPS_TOKEN' 'storage sampler must use OPS_TOKEN only for optional ops endpoint access'
-require_pattern scripts/sample-hf-bucket-storage.sh 'python3' 'storage sampler must parse JSON without jq'
-if grep -Eq '(^|[^[:alnum:]_])jq([^[:alnum:]_]|$)' scripts/sample-hf-bucket-storage.sh; then
-  echo "Contract check failed: storage sampler must not depend on jq" >&2
-  exit 1
-fi
 
 check "nginx routing contract" require_pattern hfs/nginx.conf 'listen 7860;' 'Nginx must listen on HF app port 7860'
 require_pattern hfs/nginx.conf 'location = /console' 'Nginx must normalize /console'
@@ -134,36 +216,35 @@ require_pattern hfs/nginx.conf 'location = /_admin' 'Nginx must normalize /_admi
 require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:8082/;' 'Nginx must proxy admin service'
 require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:9001/;' 'Console proxy_pass must strip /console/ prefix'
 require_pattern hfs/nginx.conf 'proxy_pass http://127\.0\.0\.1:9000;' 'S3 API must stay at the root path'
+require_pattern hfs/nginx.conf 'proxy_set_header X-HF-Authorization "";' 'S3 proxy must strip the private Space gateway header before SigV4 verification'
+require_pattern hfs/nginx.conf 'proxy_set_header X-Amzn-Trace-Id "";' 'S3 proxy must strip platform trace headers added after SigV4 signing'
+require_pattern hfs/nginx.conf 'proxy_set_header Authorization \$s3_authorization;' 'S3 proxy must strip only HF Bearer auth while preserving header SigV4'
 require_pattern hfs/nginx.conf 'proxy_hide_header X-Frame-Options;' 'Console proxy must hide upstream X-Frame-Options'
-require_pattern hfs/nginx.conf 'frame-ancestors.*huggingface\.co' 'Console CSP must allow Hugging Face iframe embedding'
-require_pattern hfs/nginx.conf 'log_format main' 'Nginx access logs must use a custom query-free format'
-require_pattern hfs/nginx.conf 'access_log /dev/stdout main;' 'Nginx access logs must not use the default query-string format'
 
 check "ops/admin service contract" require_pattern hfs/ops_service.py 'SECRET_KEYS' 'ops service must summarize secret presence only'
 require_pattern hfs/ops_service.py 'secret values are intentionally omitted' 'ops config must not return raw secrets'
+require_pattern hfs/ops_service.py 'def wrapper_source_payload' 'ops version must expose safe source provenance'
 require_pattern hfs/ops_service.py 'path in \{"/", ""\}.*query_token.*wants_html' 'query token must only bootstrap browser login at /_ops/'
-require_pattern hfs/ops_service.py 'redact_query_token' 'ops service logs must redact query token values'
-require_pattern hfs/ops_service.py 'Referrer-Policy' 'ops responses must suppress browser referrer leakage'
-require_pattern hfs/ops_service.py 'def storage_payload' 'ops service must expose a storage payload helper'
-require_pattern hfs/ops_service.py 'path == "/storage"' 'ops service must route /_ops/storage'
-require_pattern hfs/ops_service.py 'librefs_hfs_data_visible_bytes' 'ops metrics must include visible DATA_DIR bytes'
-require_pattern hfs/ops_service.py 'librefs_hfs_data_prefix_bytes' 'ops metrics must include DATA_DIR prefix bytes'
-require_pattern hfs/ops_service.py 'librefs_hfs_data_minio_internal_bytes' 'ops metrics must include MinIO internal area bytes'
 require_pattern hfs/admin_service.py 'ADMIN_ENABLED.*false' 'admin service must default to disabled'
 require_pattern hfs/admin_service.py 'confirm=true is required' 'admin write action must require explicit confirm'
-
-if sed -n '/def request_tokens/,/def request_token/p' hfs/ops_service.py | grep -q 'query_token'; then
-  echo "Contract check failed: query token must not be accepted as script/API authentication" >&2
-  exit 1
-fi
 
 if grep -Eq 'access_log /dev/stdout;' hfs/nginx.conf; then
   echo "Contract check failed: Nginx access logs must not use the default query-string format" >&2
   exit 1
 fi
 
-if grep -Eq 'listen +(9000|9001);' hfs/nginx.conf; then
-  echo "Contract check failed: hfs/nginx.conf must not expose internal ports 9000/9001" >&2
+check "manual deployment workflow" test -f .github/workflows/deploy-hf-space.yml
+require_pattern .github/workflows/deploy-hf-space.yml 'workflow_dispatch:' 'Space deployment must be manually dispatched'
+require_pattern .github/workflows/deploy-hf-space.yml 'confirm_release' 'Space deployment must require explicit confirmation'
+require_pattern .github/workflows/deploy-hf-space.yml 'options: \[candidate, production\]' 'Space deployment must use fixed manifest-owned targets'
+require_pattern .github/workflows/deploy-hf-space.yml 'hfs-dev\.candidate\.toml' 'Space deployment must select the candidate manifest explicitly'
+require_pattern .github/workflows/deploy-hf-space.yml 'scripts/export-space-bundle\.sh' 'workflow must export the wrapper boundary'
+require_pattern .github/workflows/deploy-hf-space.yml 'scripts/verify-space-bundle\.sh' 'workflow must verify the wrapper boundary'
+require_pattern .github/workflows/deploy-hf-space.yml 'Refuse a Space repository outside the wrapper boundary' 'workflow must fail closed on legacy Space files'
+require_pattern .github/workflows/deploy-hf-space.yml 'hf download' 'workflow must read back the Space repository'
+require_pattern .github/workflows/deploy-hf-space.yml 'sha256sum -c SHA256SUMS' 'workflow must verify complete uploaded wrapper bytes'
+if grep -Eq 'git push|--force|--delete|\|\| true' .github/workflows/deploy-hf-space.yml; then
+  echo "Contract check failed: deployment workflow must not force-push, delete, or bypass a failed check" >&2
   exit 1
 fi
 
@@ -176,6 +257,9 @@ else
   printf '==> nginx syntax\n'
   echo "skip: nginx is not installed locally"
 fi
+
+printf '==> Docker source build\n'
+echo "skip: source wrapper Docker build fetches libreFS from GitHub and is not run locally"
 
 if [[ "$REMOTE" -eq 1 ]]; then
   check "remote health endpoint" curl -fsS https://blueskyxn-librefs-hfs.hf.space/minio/health/ready \

@@ -44,7 +44,7 @@ https://blueskyxn-librefs-hfs.hf.space/console/
 
 ## 本地轻量验证
 
-不安装项目依赖、不本地编译 libreFS 时，可以先运行仓库契约检查：
+不安装项目依赖、不本地编译 libreFS 时，可以先运行仓库契约检查。它同时检查 HFS v2 source-lane manifest、local ledger ignore 边界、allowlisted source bundle fixture、provenance 和 manual deployment workflow：
 
 ```bash
 scripts/validate-contract.sh

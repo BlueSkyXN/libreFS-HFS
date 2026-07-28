@@ -3,10 +3,13 @@ __pycache__/
 .data/
 *.log
 
-# Local environment and secrets.
+# Local environment, generated provenance, and secrets.
 .env
 .env.*
 .env.local
 !.env.example
 !.env.*.example
+BUILD_SOURCE.json
+SHA256SUMS
+config.toml
 /local
