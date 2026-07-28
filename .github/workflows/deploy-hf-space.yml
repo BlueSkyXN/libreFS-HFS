@@ -50,6 +50,7 @@ jobs:
           [[ "$LIBREFS_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           SPACE_ID="$(python3 -c 'import os,tomllib; print(tomllib.load(open(os.environ["HFS_MANIFEST"], "rb"))["space"])')"
           echo "SPACE_ID=$SPACE_ID" >> "$GITHUB_ENV"
+          echo "LIBREFS_COMMIT=$LIBREFS_COMMIT" >> "$GITHUB_ENV"
           python3 -m pip install --disable-pip-version-check "huggingface_hub==${HF_CLI_VERSION}"
           if [[ "${{ inputs.target }}" == candidate ]]; then
             test "$(hf spaces info "$SPACE_ID" --expand private --json | python3 -c 'import json,sys; print(str(json.load(sys.stdin)["private"]).lower())')" = true
