@@ -26,7 +26,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  HF_CLI_VERSION: "1.5.0"
+  # 1.5.0 predates the Space Settings subcommands used below.
+  HF_CLI_VERSION: "1.24.0"
 
 jobs:
   deploy:
