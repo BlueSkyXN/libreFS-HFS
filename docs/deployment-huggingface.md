@@ -164,10 +164,11 @@ LIBREFS_COMMIT=<40-character-lowercase-upstream-commit>
 之后在 GitHub Actions 的 **Deploy verified LibreFS HFS wrapper** 中手动触发 `workflow_dispatch`，并输入 `RELEASE` 及相同的 upstream commit。该 workflow 会：
 
 1. 读取已配置的 release gate；
-2. 从 `GITHUB_SHA` 导出和校验最小 wrapper；
-3. 用 HF CLI 先读回当前 Space tree；只有它已经严格等于 verified wrapper allowlist 时才继续，发现 legacy source、`.env*`、`local/` 或任意额外文件就 fail-closed；
-4. 用 HF CLI 上传该 bundle，而不是使用 credential-bearing Git URL、force-push 或 whole-repo delete；
-5. 再次下载完整 Space tree，逐项比对路径、`BUILD_SOURCE.json`、`SHA256SUMS` 和所有被 checksum 覆盖的输入，随后读取 Space metadata。
+2. 要求 candidate 与 production Space 都是 private；production manifest 必须精确选择 `BlueSkyXN/libreFS-HFS`；
+3. 从 `GITHUB_SHA` 导出和校验最小 wrapper；production upload 紧前 fresh fetch `origin/main`，要求 workflow ref、checkout `HEAD`、`GITHUB_SHA` 与 current main 完全一致；独立 upstream `LIBREFS_COMMIT` 仍只与 bundle provenance 和 Space Variable 绑定；
+4. 用 HF CLI 先读回当前 Space tree；只有它已经严格等于 verified wrapper allowlist 时才继续，发现 legacy source、`.env*`、`local/` 或任意额外文件就 fail-closed；
+5. 用 HF CLI 上传该 bundle，而不是使用 credential-bearing Git URL、force-push 或 whole-repo delete；
+6. 再次下载完整 Space tree，逐项比对路径、`BUILD_SOURCE.json`、`SHA256SUMS` 和所有被 checksum 覆盖的输入，随后读取 Space metadata。
 
 该 workflow 不会删除或覆盖 allowlist 之外的远端文件。旧 full-repo Space 不会被它“顺便迁移”：release owner 必须先选择干净目标，或走单独确认、审阅和读回的 legacy cleanup 流程，再重新触发发布。
 

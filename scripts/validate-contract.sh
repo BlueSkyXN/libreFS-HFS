@@ -251,6 +251,8 @@ require_pattern .github/workflows/deploy-hf-space.yml 'workflow_dispatch:' 'Spac
 require_pattern .github/workflows/deploy-hf-space.yml 'confirm_release' 'Space deployment must require explicit confirmation'
 require_pattern .github/workflows/deploy-hf-space.yml 'options: \[candidate, production\]' 'Space deployment must use fixed manifest-owned targets'
 require_pattern .github/workflows/deploy-hf-space.yml 'hfs-dev\.candidate\.toml' 'Space deployment must select the candidate manifest explicitly'
+require_pattern .github/workflows/deploy-hf-space.yml 'FORMAL_SPACE: BlueSkyXN/libreFS-HFS' 'production deployment must pin the canonical Space id'
+require_pattern .github/workflows/deploy-hf-space.yml 'target Space must be private before wrapper upload' 'candidate and production targets must already be private'
 require_pattern .github/workflows/deploy-hf-space.yml 'scripts/export-space-bundle\.sh' 'workflow must export the wrapper boundary'
 require_pattern .github/workflows/deploy-hf-space.yml 'scripts/verify-space-bundle\.sh' 'workflow must verify the wrapper boundary'
 require_pattern .github/workflows/deploy-hf-space.yml 'Refuse a Space repository outside the wrapper boundary' 'workflow must fail closed on legacy Space files'
@@ -271,6 +273,29 @@ if grep -Eq 'git push|--force|--delete|\|\| true' .github/workflows/deploy-hf-sp
   echo "Contract check failed: deployment workflow must not force-push, delete, or bypass a failed check" >&2
   exit 1
 fi
+
+check "strict production pre-upload workflow gate" python3 - <<'PY'
+from pathlib import Path
+
+workflow = Path(".github/workflows/deploy-hf-space.yml").read_text(encoding="utf-8")
+upload_offset = workflow.index('python3 -m huggingface_hub.cli.hf upload "$SPACE_ID"')
+required_before_upload = (
+    'if os.environ["HFS_TARGET"] == "production" and os.environ["SPACE_ID"] != os.environ["FORMAL_SPACE"]:',
+    'if info.private is not True:',
+    '[[ "$GITHUB_REF" == "refs/heads/main" ]]',
+    'git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main',
+    '[[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]',
+    '[[ "$(git rev-parse origin/main)" == "$GITHUB_SHA" ]]',
+)
+for fragment in required_before_upload:
+    offset = workflow.find(fragment)
+    if offset < 0 or offset > upload_offset:
+        raise SystemExit(f"production pre-upload gate missing or late: {fragment}")
+if 'os.environ["HFS_TARGET"] == "candidate" and not info.private' in workflow:
+    raise SystemExit("production Space privacy must not be skipped")
+if '[[ "$LIBREFS_COMMIT" == "$GITHUB_SHA" ]]' in workflow:
+    raise SystemExit("upstream LIBREFS_COMMIT must remain independent from the wrapper main commit")
+PY
 
 check "license contract" require_pattern LICENSE 'GNU AFFERO GENERAL PUBLIC LICENSE' 'LICENSE must remain AGPL-3.0'
 
