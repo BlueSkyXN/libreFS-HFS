@@ -87,10 +87,19 @@ require_pattern README.md '^license: agpl-3.0$' 'README.md must keep license: ag
 
 check "HFS v2 semantic registry" test -f hfs-dev.toml
 test -f hfs-dev.candidate.toml
-require_pattern hfs-dev.toml '^standard = "2\.0"$' 'manifest must use HFS standard 2.0'
+require_pattern hfs-dev.toml '^standard = "2\.1"$' 'manifest must use HFS standard 2.1'
+require_pattern hfs-dev.candidate.toml '^standard = "2\.1"$' 'candidate manifest must use HFS standard 2.1'
 require_pattern hfs-dev.toml '^project = "librefs-hfs"$' 'manifest must declare the wrapper project'
 require_pattern hfs-dev.toml '^space = "BlueSkyXN/libreFS-HFS"$' 'manifest must declare the target Space'
 require_pattern hfs-dev.candidate.toml '^space = "BlueSkyXN/libreFS-HFS-v2-candidate"$' 'candidate manifest must declare the private candidate Space'
+require_pattern hfs-dev.toml '^project_class = "preview"$' 'canonical manifest must classify the project as preview'
+require_pattern hfs-dev.toml '^target_role = "primary"$' 'canonical manifest must declare the primary target role'
+require_pattern hfs-dev.toml '^env_file = "\.env"$' 'canonical manifest must declare the local plaintext ledger'
+require_pattern hfs-dev.toml '^secret_files = \[\]$' 'canonical manifest must declare no structured secret files'
+require_pattern hfs-dev.candidate.toml '^project_class = "preview"$' 'candidate manifest must classify the project as preview'
+require_pattern hfs-dev.candidate.toml '^target_role = "candidate"$' 'candidate manifest must declare the candidate target role'
+require_pattern hfs-dev.candidate.toml '^env_file = "local/hfs-targets/candidate\.env"$' 'candidate manifest must use an isolated local plaintext ledger'
+require_pattern hfs-dev.candidate.toml '^secret_files = \[\]$' 'candidate manifest must declare no structured secret files'
 require_pattern hfs-dev.toml '^sovereignty = "port"$' 'libreFS-HFS must remain a port wrapper'
 require_pattern hfs-dev.toml '^lane = "source"$' 'libreFS-HFS must remain in the source lane'
 require_pattern hfs-dev.toml '^version_source = "commit"$' 'manifest must declare commit-based production provenance'

@@ -23,7 +23,7 @@
 | `Dockerfile` | Ubuntu builder/runtime、Go 下载、pinned upstream source build、runtime packages、healthcheck | No | 修改 base image、build args、`LIBREFS_COMMIT`、UID/GID、复制路径或 `HEALTHCHECK` 时 |
 | `hfs-dev.toml` | HFS development alignment manifest，声明 Pattern A、bundle-only build、Space root 和 release pin surface | No | 修改 HFS 分类、runtime 获取模式、required files、release hardening backlog 或 pin surface 时 |
 | `hfs/` | Runtime glue：container entrypoint、Nginx、ops/admin Python services | Yes | 修改启动流程、进程监管、路由、鉴权、control plane、复制路径或容器写入路径前 |
-| `docs/` | 架构、配置、部署、运维、故障排查、契约对照和源码逐文件说明 | Yes | 修改任何文档、能力状态、endpoint、生产快照、HF Variables/Secrets/Volume 表述前 |
+| `docs/` | 架构、配置、部署、运维、故障排查、契约对照和源码逐文件说明 | Yes | 修改任何文档、能力状态、endpoint、canonical preview 快照、HF Variables/Secrets/Volume 表述前 |
 | `scripts/` | 本地/远端契约验证和 credentialed S3 smoke 工具 | Yes | 修改 validation、smoke、SigV4、清理逻辑、远端验收或脚本参数前 |
 | `.dockerignore` | Docker build context 过滤，避免 `.env*`、`local/`、临时文件进入远端 build | No | 修改 build context 或本地材料忽略规则时 |
 | `.gitattributes` | Hugging Face/Git 展示和文件类型规则 | No | 修改 HF 文件类型、LFS 或展示规则时 |
@@ -90,7 +90,7 @@ Mutating HF commands require explicit live-operation authorization: `hf spaces s
 - Hugging Face Space 外部只暴露 `7860`。`9000`、`9001`、`8081`、`8082` 都是容器内部端口，不要写成外部直连端口。
 - S3 client 应使用 path-style addressing；HF Space 子域名下不要推荐 virtual-hosted bucket URL。
 - 避免建议或创建名为 `console`、`minio`、`_ops`、`_admin` 的公开 bucket，因为这些路径与保留路由冲突。
-- 区分代码默认值和当前生产配置。`ADMIN_ENABLED` 代码默认必须是 `false`；当前线上状态必须用 HF Variables 或 `docs/contract-alignment.md` 的最新回读入口确认。
+- 区分代码默认值和当前 canonical preview 配置。`ADMIN_ENABLED` 代码默认必须是 `false`；当前线上状态必须用 HF Variables 或 `docs/contract-alignment.md` 的最新回读入口确认。
 
 ## Runtime and control-plane invariants
 

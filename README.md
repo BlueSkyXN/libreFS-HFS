@@ -19,7 +19,7 @@ LibreFS HFS 是一个面向 Hugging Face Docker Space 的 libreFS 部署包装�
 - Docker build 阶段安装 Go，并从 `https://github.com/libreFS/libreFS.git` 拉取源码编译。
 - Runtime 阶段仍然使用 `ubuntu:24.04`。
 - 不使用 libreFS 官方 Docker image。
-- 仓库根目录同时作为 Hugging Face Space root 和 GitHub 维护 root；`hfs-dev.toml` 声明 HFS v2 Pattern A / `port` / `source` 关系：生产版本始终由 `LIBREFS_COMMIT` 的上游 commit 固定，多服务 runtime glue 集中在 `hfs/`。
+- 仓库根目录同时作为 Hugging Face Space root 和 GitHub 维护 root；`hfs-dev.toml` 声明 HFS v2.1 `preview` / `primary` / Pattern A / `port` / `source` 关系：可复现 wrapper 始终由 `LIBREFS_COMMIT` 的上游 commit 固定，多服务 runtime glue 集中在 `hfs/`。
 - 标准交付只上传由 `scripts/export-space-bundle.sh` 从干净、不可变 Git commit 导出的最小 wrapper；bundle 自带 `BUILD_SOURCE.json` 和 `SHA256SUMS`，同时绑定 wrapper SHA 与实际 libreFS source SHA，不含 libreFS 产品源码、`.env*`、`local/`、缓存、生成数据或凭证。
 - 使用 Nginx 把 libreFS 的 S3 API 和 Web Console 合并到 Hugging Face Space 对外暴露的单端口 `7860`。
 
@@ -84,7 +84,12 @@ Hugging Face Docker Space 只对外暴露一个 app port。本项目用 Nginx �
 | Variable | `ADMIN_ENABLED` | `false` | 是否开启 `/_admin/`；默认保持关闭。 |
 | Variable | `CONTROL_PLANE_DEFAULT_LANG` | `en` | `/_ops/` 和 `/_admin/` JSON 文案默认语言；支持 `en`、`zh-CN`。 |
 
-## 当前生产配置快照
+## 当前 canonical preview 配置快照
+
+日常 Preview 变更允许直接更新 canonical Space；`hfs-dev.candidate.toml` 只用于高风险变更
+的可选隔离验证，不是常规前置门禁。canonical Secret 必须先存在于 manifest 声明的本地
+明文 `.env`；candidate 使用独立的 `local/hfs-targets/candidate.env`。这些文件保持 Git
+ignored，HF Secret 只能作为部署副本。
 
 最近回读时间：2026-06-03。实时状态以命令重新查询为准。
 
@@ -187,7 +192,7 @@ https://blueskyxn-librefs-hfs.hf.space/<bucket>/<object>
 ## 已知边界
 
 - 当前 `hf spaces volumes list` 显示 `/data` 已挂载 Hugging Face Storage Bucket；如果后续移除挂载，上传对象可能在 Space 重启、重建、迁移或停止后丢失。
-- 当前生产环境已显式开启 `/_admin/`。如果需要恢复默认安全姿态，应把 HF Variable `ADMIN_ENABLED` 改回 `false` 或移除。
+- 当前 canonical preview Space 已显式开启 `/_admin/`。如果需要恢复默认安全姿态，应把 HF Variable `ADMIN_ENABLED` 改回 `false` 或移除。
 - 当前 `cpu-basic` 硬件适合功能测试和轻量使用，不适合高吞吐对象存储。
 - 未签名浏览器直接访问根路径 `/` 可能返回 S3 XML error，这是正常现象；签名 S3 请求和配置了 policy 的对象直链才是预期访问方式。
 - 本仓库 license 使用 AGPL-3.0，因为 libreFS 本身是 AGPL-3.0。

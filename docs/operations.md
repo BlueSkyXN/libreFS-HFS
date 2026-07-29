@@ -72,7 +72,7 @@ scripts/validate-contract.sh --remote
 
 `--remote` 会访问线上 endpoint，因此不属于离线门禁。source wrapper Docker build 同样会从 GitHub 获取 libreFS 上游源码；本地只记录为 skipped，不能把静态检查当作 build 成功。
 
-## HFS v2 source 交付证据
+## HFS v2.1 source 交付证据
 
 一次受控发布至少要分别保留以下无密证据，且不要把任意一项替代另一项：
 

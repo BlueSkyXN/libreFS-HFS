@@ -50,7 +50,7 @@ fatal: couldn't find remote ref main
 
 ## Hugging Face Variables
 
-原则：不要把和代码默认值、upstream 默认值相同的配置同步到 Hugging Face Variables。Variables 只用于表达“这个 Space 明确要覆盖默认行为”。代码默认部署下，HF Variables 可以为空；当前生产环境为了开启 admin，已显式设置 `ADMIN_ENABLED=true`，并显式设置 `ADMIN_AUDIT_LOG=/tmp/librefs-hfs/admin-audit.jsonl` 让 admin audit 不写入 `/data`。
+原则：不要把和代码默认值、upstream 默认值相同的配置同步到 Hugging Face Variables。Variables 只用于表达“这个 Space 明确要覆盖默认行为”。代码默认部署下，HF Variables 可以为空；当前 canonical preview Space 为了开启 admin，已显式设置 `ADMIN_ENABLED=true`，并显式设置 `ADMIN_AUDIT_LOG=/tmp/librefs-hfs/admin-audit.jsonl` 让 admin audit 不写入 `/data`。
 
 | Variable | 必需 | 默认值 | 什么时候设置 |
 | --- | --- | --- | --- |
@@ -90,7 +90,7 @@ HF Volume:
 - BlueSkyXN/librefs-hfs-data -> /data
 ```
 
-当前生产环境最近回读状态（2026-06-03）：
+当前 canonical preview Space 最近回读状态（2026-06-03）：
 
 ```text
 HF Secrets:
