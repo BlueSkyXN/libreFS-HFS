@@ -427,7 +427,7 @@ ops 鉴权支持三种方式：
 - `hfs/start.sh` 的 Secret 校验、公开 URL 推导、Console redirect URL、ops/admin service 和 Nginx 配置预检。
 - `hfs/nginx.conf` 的 `7860` 监听、`/_ops/`、`/_admin/`、`/console/` 子路径、S3 根路径和 iframe header。
 - `hfs/ops_service.py` 的 `/_ops/storage` 路由和 storage metrics。
-- `scripts/sample-hf-bucket-storage.sh` 的存在性、可执行位、Bash 语法和 `hf`/`python3` 只读采样约束。
+- `scripts/sample-hf-bucket-storage.sh` 的存在性、可执行位、Bash 语法和 pinned `HfApi`/module CLI 只读采样约束。
 - `LICENSE` 是否仍是 AGPL-3.0。
 - 如果本机安装了 `nginx`，运行 `nginx -t -c "$PWD/hfs/nginx.conf"`。
 
@@ -465,10 +465,10 @@ scripts/sample-hf-bucket-storage.sh \
   --ops-url https://blueskyxn-librefs-hfs.hf.space/_ops
 ```
 
-脚本会调用：
+脚本固定验证 `huggingface_hub==1.5.0` 与 `click==8.3.1`，然后调用：
 
-- `hf buckets info "$bucket" --json`
-- `hf buckets list "$bucket" -R --json`
+- `HfApi().bucket_info("$bucket")`，生成只包含 bucket metadata 的结构化 JSON
+- `python3 -m huggingface_hub.cli.hf buckets list "$bucket" --recursive --format json`
 - 可选 `curl -H "X-Ops-Token: $OPS_TOKEN" "$ops_url/storage?format=json"`
 
 输出字段包括 `timestamp_utc`、`info_size`、`info_total_files`、`visible_sum`、`visible_files`、`drift_bytes`、`ops_visible_sum` 和 `largest_visible_file`。脚本用 `python3` 解析 JSON，不依赖 `jq`，也不会打印 `OPS_TOKEN`。

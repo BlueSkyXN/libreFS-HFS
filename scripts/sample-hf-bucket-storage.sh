@@ -2,6 +2,8 @@
 set -Eeuo pipefail
 
 DEFAULT_BUCKET="BlueSkyXN/librefs-hfs-data"
+EXPECTED_HF_HUB_VERSION="1.5.0"
+EXPECTED_CLICK_VERSION="8.3.1"
 BUCKET="${HF_BUCKET_ID:-$DEFAULT_BUCKET}"
 OPS_URL="${OPS_URL:-}"
 INTERVAL=0
@@ -83,13 +85,28 @@ if [[ "$COUNT" == "0" && "$INTERVAL" == "0" ]]; then
   exit 2
 fi
 
-if ! command -v hf >/dev/null 2>&1; then
-  echo "hf CLI is required." >&2
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required." >&2
   exit 1
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 is required." >&2
+if ! python3 - "$EXPECTED_HF_HUB_VERSION" "$EXPECTED_CLICK_VERSION" <<'PY'
+import importlib.metadata
+import sys
+
+expected_hub, expected_click = sys.argv[1:]
+try:
+    actual_hub = importlib.metadata.version("huggingface_hub")
+    actual_click = importlib.metadata.version("click")
+except importlib.metadata.PackageNotFoundError as exc:
+    raise SystemExit(f"required Python package is missing: {exc.name}") from exc
+if actual_hub != expected_hub or actual_click != expected_click:
+    raise SystemExit(
+        "storage sampler requires "
+        f"huggingface_hub=={expected_hub} and click=={expected_click}"
+    )
+PY
+then
   exit 1
 fi
 
@@ -124,8 +141,23 @@ sample_once() {
   local list_json="$TMP_DIR/list.json"
   local ops_json="$TMP_DIR/ops.json"
 
-  hf buckets info "$BUCKET" --json >"$info_json"
-  hf buckets list "$BUCKET" -R --json >"$list_json"
+  python3 - "$BUCKET" >"$info_json" <<'PY'
+import json
+import sys
+
+from huggingface_hub import HfApi
+
+info = HfApi().bucket_info(sys.argv[1])
+print(json.dumps({
+    "id": info.id,
+    "private": info.private,
+    "createdAt": info.created_at.isoformat(),
+    "size": info.size,
+    "totalFiles": info.total_files,
+}, sort_keys=True))
+PY
+  python3 -m huggingface_hub.cli.hf buckets list \
+    "$BUCKET" --recursive --format json >"$list_json"
 
   if [[ -n "$OPS_URL" ]]; then
     curl -fsS -H "X-Ops-Token: ${OPS_TOKEN}" "$(ops_endpoint)" >"$ops_json"

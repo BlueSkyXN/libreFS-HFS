@@ -193,10 +193,10 @@ scripts/sample-hf-bucket-storage.sh \
 
 | 字段 | 含义 |
 | --- | --- |
-| `info_size` | `hf buckets info` 返回的 bucket 账面 size。 |
-| `info_total_files` | `hf buckets info` 返回的 total files。 |
-| `visible_sum` | `hf buckets list -R` 当前 visible file size 求和。 |
-| `visible_files` | `hf buckets list -R` 当前 visible file 数。 |
+| `info_size` | pinned `HfApi.bucket_info()` 返回的 bucket 账面 size。 |
+| `info_total_files` | pinned `HfApi.bucket_info()` 返回的 total files。 |
+| `visible_sum` | pinned module CLI `buckets list --recursive --format json` 当前 visible file size 求和。 |
+| `visible_files` | pinned module CLI `buckets list --recursive --format json` 当前 visible file 数。 |
 | `drift_bytes` | `info_size - visible_sum`。 |
 | `ops_visible_sum` | 可选 `/_ops/storage` 返回的容器内 visible bytes。 |
 | `largest_visible_file` | HF visible tree 中最大的当前文件。 |
