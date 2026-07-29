@@ -99,6 +99,8 @@ require_pattern hfs-dev.toml '^runtime_mode = "bundle-only-build"$' 'runtime mus
 require_pattern hfs-dev.toml '^release_commit_env = "LIBREFS_COMMIT"$' 'registry must name the upstream release commit pin'
 require_pattern hfs-dev.toml '^release_gate_env = "HFS_RELEASE_BUILD"$' 'registry must name the release gate'
 require_pattern hfs-dev.toml '"MINIO_ROOT_PASSWORD"' 'registry must name required Space secrets without values'
+require_pattern hfs-dev.toml '^optional_secrets = \[$' 'registry must separate disabled admin credentials as optional'
+require_pattern hfs-dev.toml '"ADMIN_TOKEN"' 'registry must keep the disabled admin token registered'
 require_pattern hfs-dev.toml '"HF_TOKEN"' 'registry must keep deployment controls local-only'
 if grep -Eq '(hf_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,})' hfs-dev.toml; then
   echo "Contract check failed: hfs-dev.toml must not contain a credential value" >&2
@@ -204,9 +206,20 @@ require_pattern scripts/smoke-s3-curl.sh 'Authorization: Bearer' 'private candid
 require_pattern scripts/smoke-s3-curl.sh 'Refusing to use bucket' 'S3 smoke test must refuse existing buckets'
 
 check "storage sampler script contract" test -f scripts/sample-hf-bucket-storage.sh
-require_pattern scripts/sample-hf-bucket-storage.sh 'hf buckets info "\$BUCKET" --json' 'storage sampler must read HF bucket accounting'
-require_pattern scripts/sample-hf-bucket-storage.sh 'hf buckets list "\$BUCKET" -R --json' 'storage sampler must read HF bucket visible tree'
+require_pattern scripts/sample-hf-bucket-storage.sh '^EXPECTED_HF_HUB_VERSION="1\.5\.0"$' 'storage sampler must pin huggingface_hub 1.5.0'
+require_pattern scripts/sample-hf-bucket-storage.sh '^EXPECTED_CLICK_VERSION="8\.3\.3"$' 'storage sampler must pin the module CLI click runtime'
+require_pattern scripts/sample-hf-bucket-storage.sh 'HfApi\(\)\.bucket_info\(sys\.argv\[1\]\)' 'storage sampler must use structured HfApi bucket accounting'
+require_pattern scripts/sample-hf-bucket-storage.sh 'python3 -m huggingface_hub\.cli\.hf buckets list' 'storage sampler must use the pinned module CLI for the visible tree'
+require_pattern scripts/sample-hf-bucket-storage.sh '"\$BUCKET" --recursive --format json' 'storage sampler must request recursive JSON visible-tree output'
 require_pattern scripts/sample-hf-bucket-storage.sh 'OPS_TOKEN' 'storage sampler must use OPS_TOKEN only for optional ops endpoint access'
+if grep -Eq '(^|[^[:alnum:]_.-])hf[[:space:]]+buckets[[:space:]]+(info|list)([[:space:]]|$)' scripts/sample-hf-bucket-storage.sh; then
+  echo "Contract check failed: storage sampler must not use the unpinned hf console entrypoint" >&2
+  exit 1
+fi
+if grep -Eq 'buckets[[:space:]]+info[^[:cntrl:]]*--(json|format)' scripts/sample-hf-bucket-storage.sh; then
+  echo "Contract check failed: storage sampler must not claim buckets info has JSON output" >&2
+  exit 1
+fi
 
 check "nginx routing contract" require_pattern hfs/nginx.conf 'listen 7860;' 'Nginx must listen on HF app port 7860'
 require_pattern hfs/nginx.conf 'location = /console' 'Nginx must normalize /console'
@@ -241,7 +254,18 @@ require_pattern .github/workflows/deploy-hf-space.yml 'hfs-dev\.candidate\.toml'
 require_pattern .github/workflows/deploy-hf-space.yml 'scripts/export-space-bundle\.sh' 'workflow must export the wrapper boundary'
 require_pattern .github/workflows/deploy-hf-space.yml 'scripts/verify-space-bundle\.sh' 'workflow must verify the wrapper boundary'
 require_pattern .github/workflows/deploy-hf-space.yml 'Refuse a Space repository outside the wrapper boundary' 'workflow must fail closed on legacy Space files'
-require_pattern .github/workflows/deploy-hf-space.yml 'hf download' 'workflow must read back the Space repository'
+require_pattern .github/workflows/deploy-hf-space.yml 'huggingface_hub\.cli\.hf download' 'workflow must read back the Space repository through the pinned module CLI'
+require_pattern .github/workflows/deploy-hf-space.yml 'huggingface_hub\.cli\.hf upload' 'workflow must upload the Space repository through the pinned module CLI'
+require_pattern .github/workflows/deploy-hf-space.yml 'HF_CLI_VERSION: "1\.5\.0"' 'workflow must pin huggingface_hub 1.5.0'
+require_pattern .github/workflows/deploy-hf-space.yml 'HF_CLI_CLICK_VERSION: "8\.3\.3"' 'workflow must pin the module CLI click runtime'
+require_pattern .github/workflows/deploy-hf-space.yml 'huggingface_hub==\$\{HF_CLI_VERSION\}' 'workflow must install the pinned huggingface_hub version'
+require_pattern .github/workflows/deploy-hf-space.yml 'click==\$\{HF_CLI_CLICK_VERSION\}' 'workflow must install the pinned click version'
+require_pattern .github/workflows/deploy-hf-space.yml 'get_space_variables' 'workflow must read Space Variables through HfApi because the pinned CLI has no Settings subcommands'
+require_pattern .github/workflows/deploy-hf-space.yml 'space_info' 'workflow must read Space metadata through HfApi'
+if grep -Eq '(^|[^[:alnum:]_.-])hf[[:space:]]+(download|upload|spaces)([[:space:]]|$)' .github/workflows/deploy-hf-space.yml; then
+  echo "Contract check failed: deployment workflow must invoke the pinned HF CLI through its Python module entrypoint" >&2
+  exit 1
+fi
 require_pattern .github/workflows/deploy-hf-space.yml 'sha256sum -c SHA256SUMS' 'workflow must verify complete uploaded wrapper bytes'
 if grep -Eq 'git push|--force|--delete|\|\| true' .github/workflows/deploy-hf-space.yml; then
   echo "Contract check failed: deployment workflow must not force-push, delete, or bypass a failed check" >&2
