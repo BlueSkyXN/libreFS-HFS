@@ -243,7 +243,18 @@ require_pattern .github/workflows/deploy-hf-space.yml 'hfs-dev\.candidate\.toml'
 require_pattern .github/workflows/deploy-hf-space.yml 'scripts/export-space-bundle\.sh' 'workflow must export the wrapper boundary'
 require_pattern .github/workflows/deploy-hf-space.yml 'scripts/verify-space-bundle\.sh' 'workflow must verify the wrapper boundary'
 require_pattern .github/workflows/deploy-hf-space.yml 'Refuse a Space repository outside the wrapper boundary' 'workflow must fail closed on legacy Space files'
-require_pattern .github/workflows/deploy-hf-space.yml 'hf download' 'workflow must read back the Space repository'
+require_pattern .github/workflows/deploy-hf-space.yml 'huggingface_hub\.cli\.hf download' 'workflow must read back the Space repository through the pinned module CLI'
+require_pattern .github/workflows/deploy-hf-space.yml 'huggingface_hub\.cli\.hf upload' 'workflow must upload the Space repository through the pinned module CLI'
+require_pattern .github/workflows/deploy-hf-space.yml 'HF_CLI_VERSION: "1\.5\.0"' 'workflow must pin huggingface_hub 1.5.0'
+require_pattern .github/workflows/deploy-hf-space.yml 'HF_CLI_CLICK_VERSION: "8\.3\.1"' 'workflow must pin the module CLI click runtime'
+require_pattern .github/workflows/deploy-hf-space.yml 'huggingface_hub==\$\{HF_CLI_VERSION\}' 'workflow must install the pinned huggingface_hub version'
+require_pattern .github/workflows/deploy-hf-space.yml 'click==\$\{HF_CLI_CLICK_VERSION\}' 'workflow must install the pinned click version'
+require_pattern .github/workflows/deploy-hf-space.yml 'get_space_variables' 'workflow must read Space Variables through HfApi because the pinned CLI has no Settings subcommands'
+require_pattern .github/workflows/deploy-hf-space.yml 'space_info' 'workflow must read Space metadata through HfApi'
+if grep -Eq '(^|[^[:alnum:]_.-])hf[[:space:]]+(download|upload|spaces)([[:space:]]|$)' .github/workflows/deploy-hf-space.yml; then
+  echo "Contract check failed: deployment workflow must invoke the pinned HF CLI through its Python module entrypoint" >&2
+  exit 1
+fi
 require_pattern .github/workflows/deploy-hf-space.yml 'sha256sum -c SHA256SUMS' 'workflow must verify complete uploaded wrapper bytes'
 if grep -Eq 'git push|--force|--delete|\|\| true' .github/workflows/deploy-hf-space.yml; then
   echo "Contract check failed: deployment workflow must not force-push, delete, or bypass a failed check" >&2
