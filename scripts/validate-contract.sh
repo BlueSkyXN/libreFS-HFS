@@ -207,7 +207,7 @@ require_pattern scripts/smoke-s3-curl.sh 'Refusing to use bucket' 'S3 smoke test
 
 check "storage sampler script contract" test -f scripts/sample-hf-bucket-storage.sh
 require_pattern scripts/sample-hf-bucket-storage.sh '^EXPECTED_HF_HUB_VERSION="1\.5\.0"$' 'storage sampler must pin huggingface_hub 1.5.0'
-require_pattern scripts/sample-hf-bucket-storage.sh '^EXPECTED_CLICK_VERSION="8\.3\.1"$' 'storage sampler must pin the module CLI click runtime'
+require_pattern scripts/sample-hf-bucket-storage.sh '^EXPECTED_CLICK_VERSION="8\.3\.3"$' 'storage sampler must pin the module CLI click runtime'
 require_pattern scripts/sample-hf-bucket-storage.sh 'HfApi\(\)\.bucket_info\(sys\.argv\[1\]\)' 'storage sampler must use structured HfApi bucket accounting'
 require_pattern scripts/sample-hf-bucket-storage.sh 'python3 -m huggingface_hub\.cli\.hf buckets list' 'storage sampler must use the pinned module CLI for the visible tree'
 require_pattern scripts/sample-hf-bucket-storage.sh '"\$BUCKET" --recursive --format json' 'storage sampler must request recursive JSON visible-tree output'
@@ -257,7 +257,7 @@ require_pattern .github/workflows/deploy-hf-space.yml 'Refuse a Space repository
 require_pattern .github/workflows/deploy-hf-space.yml 'huggingface_hub\.cli\.hf download' 'workflow must read back the Space repository through the pinned module CLI'
 require_pattern .github/workflows/deploy-hf-space.yml 'huggingface_hub\.cli\.hf upload' 'workflow must upload the Space repository through the pinned module CLI'
 require_pattern .github/workflows/deploy-hf-space.yml 'HF_CLI_VERSION: "1\.5\.0"' 'workflow must pin huggingface_hub 1.5.0'
-require_pattern .github/workflows/deploy-hf-space.yml 'HF_CLI_CLICK_VERSION: "8\.3\.1"' 'workflow must pin the module CLI click runtime'
+require_pattern .github/workflows/deploy-hf-space.yml 'HF_CLI_CLICK_VERSION: "8\.3\.3"' 'workflow must pin the module CLI click runtime'
 require_pattern .github/workflows/deploy-hf-space.yml 'huggingface_hub==\$\{HF_CLI_VERSION\}' 'workflow must install the pinned huggingface_hub version'
 require_pattern .github/workflows/deploy-hf-space.yml 'click==\$\{HF_CLI_CLICK_VERSION\}' 'workflow must install the pinned click version'
 require_pattern .github/workflows/deploy-hf-space.yml 'get_space_variables' 'workflow must read Space Variables through HfApi because the pinned CLI has no Settings subcommands'
