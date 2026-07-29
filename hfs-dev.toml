@@ -28,6 +28,8 @@ secrets = [
   "MINIO_ROOT_USER",
   "MINIO_ROOT_PASSWORD",
   "OPS_TOKEN",
+]
+optional_secrets = [
   "ADMIN_TOKEN",
 ]
 variables = [

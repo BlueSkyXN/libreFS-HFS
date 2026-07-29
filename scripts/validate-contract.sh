@@ -99,6 +99,8 @@ require_pattern hfs-dev.toml '^runtime_mode = "bundle-only-build"$' 'runtime mus
 require_pattern hfs-dev.toml '^release_commit_env = "LIBREFS_COMMIT"$' 'registry must name the upstream release commit pin'
 require_pattern hfs-dev.toml '^release_gate_env = "HFS_RELEASE_BUILD"$' 'registry must name the release gate'
 require_pattern hfs-dev.toml '"MINIO_ROOT_PASSWORD"' 'registry must name required Space secrets without values'
+require_pattern hfs-dev.toml '^optional_secrets = \[$' 'registry must separate disabled admin credentials as optional'
+require_pattern hfs-dev.toml '"ADMIN_TOKEN"' 'registry must keep the disabled admin token registered'
 require_pattern hfs-dev.toml '"HF_TOKEN"' 'registry must keep deployment controls local-only'
 if grep -Eq '(hf_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,})' hfs-dev.toml; then
   echo "Contract check failed: hfs-dev.toml must not contain a credential value" >&2
