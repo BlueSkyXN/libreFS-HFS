@@ -26,8 +26,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # 1.5.0 predates the Space Settings subcommands used below.
-  HF_CLI_VERSION: "1.24.0"
+  FORMAL_SPACE: BlueSkyXN/libreFS-HFS
+  HF_CLI_VERSION: "1.5.0"
+  HF_CLI_CLICK_VERSION: "8.3.3"
 
 jobs:
   deploy:
@@ -51,14 +52,30 @@ jobs:
           SPACE_ID="$(python3 -c 'import os,tomllib; print(tomllib.load(open(os.environ["HFS_MANIFEST"], "rb"))["space"])')"
           echo "SPACE_ID=$SPACE_ID" >> "$GITHUB_ENV"
           echo "LIBREFS_COMMIT=$LIBREFS_COMMIT" >> "$GITHUB_ENV"
-          python3 -m pip install --disable-pip-version-check "huggingface_hub==${HF_CLI_VERSION}"
-          if [[ "${{ inputs.target }}" == candidate ]]; then
-            test "$(hf spaces info "$SPACE_ID" --expand private --json | python3 -c 'import json,sys; print(str(json.load(sys.stdin)["private"]).lower())')" = true
-          fi
-          configured_variables="$(hf spaces variables list "$SPACE_ID")"
-          grep -F "LIBREFS_COMMIT" <<<"$configured_variables" >/dev/null
-          grep -F "$LIBREFS_COMMIT" <<<"$configured_variables" >/dev/null
-          grep -E 'HFS_RELEASE_BUILD.*true|true.*HFS_RELEASE_BUILD' <<<"$configured_variables" >/dev/null
+          python3 -m pip install --disable-pip-version-check \
+            "huggingface_hub==${HF_CLI_VERSION}" \
+            "click==${HF_CLI_CLICK_VERSION}"
+          export SPACE_ID LIBREFS_COMMIT
+          HFS_TARGET="${{ inputs.target }}" python3 - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+
+          if os.environ["HFS_TARGET"] == "production" and os.environ["SPACE_ID"] != os.environ["FORMAL_SPACE"]:
+              raise SystemExit("production manifest must select the canonical LibreFS Space")
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          info = api.space_info(os.environ["SPACE_ID"], expand=["private"])
+          if info.private is not True:
+              raise SystemExit("target Space must be private before wrapper upload")
+          variables = api.get_space_variables(os.environ["SPACE_ID"])
+          expected = {
+              "LIBREFS_COMMIT": os.environ["LIBREFS_COMMIT"],
+              "HFS_RELEASE_BUILD": "true",
+          }
+          for name, value in expected.items():
+              remote = variables.get(name)
+              if remote is None or remote.value != value:
+                  raise SystemExit(f"configured Space Variable mismatch: {name}")
+          PY
 
       - name: Export and verify the allowlisted Space wrapper
         env:
@@ -80,7 +97,7 @@ jobs:
           bundle_dir="$RUNNER_TEMP/librefs-hfs-space-bundle"
           preflight_dir="$RUNNER_TEMP/librefs-hfs-space-preflight"
           expected_paths="$(cd "$bundle_dir" && find . -type f -print | LC_ALL=C sort | cut -c3-)"
-          if ! hf download "$SPACE_ID" --repo-type space --local-dir "$preflight_dir" >/dev/null 2>&1; then
+          if ! python3 -m huggingface_hub.cli.hf download "$SPACE_ID" --repo-type space --local-dir "$preflight_dir" >/dev/null 2>&1; then
             echo "Refusing to upload: unable to read the current Space repository." >&2
             exit 1
           fi
@@ -101,7 +118,13 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           set -Eeuo pipefail
-          hf upload "$SPACE_ID" "$RUNNER_TEMP/librefs-hfs-space-bundle" . \
+          if [[ "${{ inputs.target }}" == "production" ]]; then
+            [[ "$GITHUB_REF" == "refs/heads/main" ]]
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+            [[ "$(git rev-parse origin/main)" == "$GITHUB_SHA" ]]
+          fi
+          python3 -m huggingface_hub.cli.hf upload "$SPACE_ID" "$RUNNER_TEMP/librefs-hfs-space-bundle" . \
             --repo-type space \
             --commit-message "Deploy verified wrapper ${GITHUB_SHA}"
 
@@ -113,7 +136,7 @@ jobs:
           bundle_dir="$RUNNER_TEMP/librefs-hfs-space-bundle"
           readback_dir="$RUNNER_TEMP/librefs-hfs-space-readback"
           expected_paths="$(cd "$bundle_dir" && find . -type f -print | LC_ALL=C sort | cut -c3-)"
-          if ! hf download "$SPACE_ID" --repo-type space --local-dir "$readback_dir" >/dev/null 2>&1; then
+          if ! python3 -m huggingface_hub.cli.hf download "$SPACE_ID" --repo-type space --local-dir "$readback_dir" >/dev/null 2>&1; then
             echo "Unable to read back the uploaded Space repository." >&2
             exit 1
           fi
@@ -125,7 +148,17 @@ jobs:
             cd "$readback_dir"
             sha256sum -c SHA256SUMS
           )
-          hf spaces info "$SPACE_ID"
+          python3 - <<'PY'
+          import os
+          import re
+          from huggingface_hub import HfApi
+
+          space_id = os.environ["SPACE_ID"]
+          info = HfApi(token=os.environ["HF_TOKEN"]).space_info(space_id)
+          if info.id != space_id or not re.fullmatch(r"[0-9a-f]{40}", info.sha or ""):
+              raise SystemExit("Space metadata readback returned unexpected identity or revision")
+          print(f"Space metadata readback succeeded: id={info.id}, sha={info.sha}")
+          PY
 
       - name: Record remaining runtime owner gates
         run: |
