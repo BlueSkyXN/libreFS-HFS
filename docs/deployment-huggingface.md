@@ -37,7 +37,7 @@ hf spaces secrets add BlueSkyXN/libreFS-HFS \
   -s OPS_TOKEN='<strong-ops-token>'
 ```
 
-如果当前生产策略需要开启 `/_admin/`，还需要设置：
+如果当前 canonical preview 策略需要开启 `/_admin/`，还需要设置：
 
 ```bash
 hf spaces secrets add BlueSkyXN/libreFS-HFS \
@@ -56,7 +56,7 @@ hf spaces secrets list BlueSkyXN/libreFS-HFS
 
 ## 可选 Variables
 
-代码默认部署不需要配置 HF Variables。不要把和代码默认值或 upstream 默认值相同的变量同步到 Hugging Face；这会让云端配置看起来像有很多“特殊设置”，实际只是噪音。当前生产环境为了开启 admin，已显式设置 `ADMIN_ENABLED=true`。
+代码默认部署不需要配置 HF Variables。不要把和代码默认值或 upstream 默认值相同的变量同步到 Hugging Face；这会让云端配置看起来像有很多“特殊设置”，实际只是噪音。当前 canonical preview Space 为了开启 admin，已显式设置 `ADMIN_ENABLED=true`。
 
 | Variable | 默认值 | 什么时候设置 |
 | --- | --- | --- |
@@ -89,7 +89,7 @@ hf spaces variables list BlueSkyXN/libreFS-HFS
 No results found.
 ```
 
-当前生产环境最近回读为 2026-06-03 快照：
+当前 canonical preview Space 最近回读为 2026-06-03 快照：
 
 ```text
 ADMIN_ENABLED=true
@@ -231,7 +231,7 @@ WebUI: https://blueskyxn-librefs-hfs.hf.space/console/
 3. 配置 `MINIO_ROOT_USER`。
 4. 配置 `MINIO_ROOT_PASSWORD`。
 5. 配置 `OPS_TOKEN`。
-6. 如果需要生产环境开启 admin，配置 `ADMIN_TOKEN` 和 `ADMIN_ENABLED=true`。
+6. 如果需要 canonical preview Space 开启 admin，先在本地明文来源配置 `ADMIN_TOKEN`，再同步 Secret，并设置 `ADMIN_ENABLED=true`。
 7. 推送仓库文件。
 8. 等待 Space stage 变为 `RUNNING`。
 9. 检查 `/minio/health/ready`。

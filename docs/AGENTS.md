@@ -2,11 +2,11 @@
 
 `docs/` is the public documentation and operational fact source for LibreFS HFS.
 Read this card before editing live state, endpoints, Secret/Variable names, ops/admin, or persistence wording.
-Start with `docs/contract-alignment.md` for runtime behavior or production snapshots.
+Start with `docs/contract-alignment.md` for runtime behavior or canonical preview snapshots.
 
 ## Local invariants
 
-- Separate code defaults from production config; read back live state before calling it current.
+- Separate code defaults from canonical preview config; read back live state before calling it current.
 - Document Secret keys and presence only; never write token, password, access-key, or private URL values.
 - Health checks prove route/process availability only, not S3 writes, policy, public reads, or persistence.
 - `/data` Volume attached is not persistence validation; require upload, restart, read, rebuild, and read again.
@@ -15,7 +15,7 @@ Start with `docs/contract-alignment.md` for runtime behavior or production snaps
 
 ## Update order
 
-- Runtime contract or production snapshot: update `docs/contract-alignment.md` first, then README and affected docs.
+- Runtime contract or canonical preview snapshot: update `docs/contract-alignment.md` first, then README and affected docs.
 - Endpoint, Console URL, S3 URL, ops/admin route, login, or token transport: check README plus `configuration.md`, `operations.md`, `architecture.md`, and `source-walkthrough.md`.
 - `troubleshooting.md` should cover real or high-probability failures with evidence, not speculative catalogs.
 

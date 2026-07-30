@@ -27,8 +27,8 @@ concurrency:
 
 env:
   FORMAL_SPACE: BlueSkyXN/libreFS-HFS
-  HF_CLI_VERSION: "1.5.0"
-  HF_CLI_CLICK_VERSION: "8.3.3"
+  HF_CLI_VERSION: "1.25.1"
+  HF_CLI_CLICK_VERSION: "8.4.2"
 
 jobs:
   deploy:
@@ -55,6 +55,8 @@ jobs:
           python3 -m pip install --disable-pip-version-check \
             "huggingface_hub==${HF_CLI_VERSION}" \
             "click==${HF_CLI_CLICK_VERSION}"
+          python3 -m huggingface_hub.cli.hf version
+          python3 -m huggingface_hub.cli.hf repos settings --help | grep -- --protected
           export SPACE_ID LIBREFS_COMMIT
           HFS_TARGET="${{ inputs.target }}" python3 - <<'PY'
           import os

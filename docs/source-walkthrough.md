@@ -465,7 +465,7 @@ scripts/sample-hf-bucket-storage.sh \
   --ops-url https://blueskyxn-librefs-hfs.hf.space/_ops
 ```
 
-脚本固定验证 `huggingface_hub==1.5.0` 与 `click==8.3.3`，然后调用：
+脚本固定验证 `huggingface_hub==1.25.1` 与 `click==8.4.2`，然后调用：
 
 - `HfApi().bucket_info("$bucket")`，生成只包含 bucket metadata 的结构化 JSON
 - `python3 -m huggingface_hub.cli.hf buckets list "$bucket" --recursive --format json`

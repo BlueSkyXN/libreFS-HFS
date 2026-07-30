@@ -1,13 +1,19 @@
-standard = "2.0"
+standard = "2.1"
 project = "librefs-hfs"
 space = "BlueSkyXN/libreFS-HFS"
+project_class = "preview"
+target_role = "primary"
+space_visibility = "protected"
+bucket_visibility = "private"
 sovereignty = "port"
 lane = "source"
 version_source = "commit"
+env_file = ".env"
+secret_files = []
 
 # This is a semantic registry only. Dockerfile and hfs/start.sh remain the
 # authoritative locations for the upstream pin validation and runtime rules.
-# Every production build is exported as a minimal wrapper bundle and compiles
+# Every reviewed wrapper build is exported as a minimal bundle and compiles
 # the one immutable libreFS commit recorded in that bundle's provenance.
 pattern = "A"
 runtime_mode = "bundle-only-build"
